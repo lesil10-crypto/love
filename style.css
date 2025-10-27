@@ -1,0 +1,229 @@
+/* Noto Sans KR font global application */
+body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background-color: #e0e5ec; /* Updated background color for neumorphism */
+    color: #4a5568; /* Default text color */
+}
+
+/* --- Global 3D Text Effect (Neumorphic Texture) --- */
+body, h1, h2, h3, h4, p, span, div, button, a {
+    text-shadow: 1px 1px 1px #ffffff, -1px -1px 1px #c5c9d2;
+}
+input, select, textarea {
+    text-shadow: none; /* Input fields should not have text shadow for readability */
+    background-color: #e0e5ec;
+}
+.prose p, .prose li { /* Reset for long-form text to improve readability */
+    text-shadow: none;
+}
+/* --- END --- */
+
+/* 3D texture (embossed effect) button style */
+.btn-3d {
+    background-color: #e0e5ec;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-weight: 600;
+    color: #4a5568;
+    box-shadow: 6px 6px 12px #c5c9d2, -6px -6px 12px #fdffff;
+    transition: all 0.2s ease-in-out;
+    outline: none;
+    text-shadow: 1px 1px 1px #ffffff, -1px -1px 1px #c5c9d2; /* Button text texture */
+}
+
+.btn-3d:hover {
+    box-shadow: 4px 4px 8px #c5c9d2, -4px -4px 8px #fdffff;
+}
+
+.btn-3d:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: inset 2px 2px 4px #c5c9d2, inset -2px -2px 4px #fdffff;
+}
+
+.btn-3d:active {
+    box-shadow: inset 4px 4px 8px #c5c9d2, inset -4px -4px 8px #fdffff;
+}
+
+/* Card design */
+.card {
+    background-color: #e0e5ec;
+    border-radius: 15px;
+    box-shadow: 8px 8px 16px #c5c9d2, -8px -8px 16px #fdffff;
+    margin-bottom: 2rem;
+}
+
+/* Click to Search style */
+.clickable-word {
+    cursor: pointer;
+    font-weight: 500;
+    color: #2b6cb0;
+    transition: color 0.2s;
+    border-bottom: 1px dotted #2b6cb0;
+    text-shadow: none; /* Clickable words should be clear */
+}
+.clickable-word:hover {
+    color: #2c5282;
+    background-color: #bee3f8;
+}
+
+/* Loading spinner */
+.loader {
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Modal style */
+.modal {
+    transition: opacity 0.3s ease;
+}
+
+/* Toast message style */
+.toast {
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.5s, visibility 0.5s, bottom 0.5s;
+}
+.toast.show {
+    visibility: visible;
+    opacity: 1;
+}
+
+.clickable-image {
+    cursor: pointer;
+    transition: transform 0.2s ease-in-out;
+}
+.clickable-image:hover {
+    transform: scale(1.03);
+}
+
+/* Icon Button Base Style (Circular Neumorphism) */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem; /* 36px */
+    height: 2.25rem; /* 36px */
+    border-radius: 9999px;
+    background-color: #e2e8f0;
+    transition: all 0.2s;
+    color: #4a5568;
+    box-shadow: 3px 3px 6px #c5c9d2, -3px -3px 6px #fdffff;
+    position: relative; /* For tooltip positioning */
+}
+.icon-btn:hover {
+    color: #1a202c;
+    box-shadow: 2px 2px 4px #c5c9d2, -2px -2px 4px #fdffff;
+}
+.icon-btn:active {
+    box-shadow: inset 2px 2px 4px #c5c9d2, inset -2px -2px 4px #fdffff;
+}
+
+/* Icon SVG Styling - Adding Neumorphism Texture to the Icon Path itself */
+.icon-btn svg path, .icon-btn svg circle, .icon-btn svg polygon {
+    filter: drop-shadow(1px 1px 1px rgba(255, 255, 255, 0.7)) drop-shadow(-1px -1px 1px rgba(0, 0, 0, 0.2));
+    transition: filter 0.2s;
+}
+
+/* Tooltip styles */
+.tooltip {
+    visibility: hidden;
+    opacity: 0;
+    background-color: #2d3748;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 10px;
+    position: absolute;
+    z-index: 10;
+    bottom: 125%; /* Position above the button */
+    left: 50%;
+    transform: translateX(-50%);
+    transition: opacity 0.2s;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    text-shadow: none; /* Tooltip text should be clear */
+}
+
+.icon-btn:hover .tooltip {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Print-specific styles for better output (FIXED) */
+@media print {
+    body {
+        background-color: #fff !important;
+        font-family: 'Times New Roman', serif;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* 모든 주요 UI와 컨테이너를 숨기고, print-container만 보이게 함 */
+    #app-container,
+    #search-bar-container,
+    #shortcut-buttons,
+    #loading-container,
+    #tab-bar,
+    footer,
+    .modal, .toast, .tooltip, #auth-container, #confirmation-modal, #password-modal {
+        display: none !important;
+    }
+
+    /* print-container만 인쇄 영역에 표시 */
+    #print-container {
+        display: block !important;
+        width: 100%;
+        margin: 0 auto;
+        padding: 0 1cm; /* 여백 추가 */
+    }
+
+    /* 인쇄 헤더 (제목) */
+    .print-header {
+        display: block !important;
+        text-align: center;
+        margin-bottom: 20px;
+        padding-top: 10px;
+    }
+    .print-header h1 {
+        font-size: 24pt;
+        font-weight: bold;
+        color: #000;
+        text-shadow: none;
+    }
+
+    /* 카드 스타일 리셋 */
+    .card {
+        box-shadow: none;
+        border: 1px solid #ccc;
+        background-color: #fff !important;
+        margin-bottom: 1.5rem;
+        padding: 10px !important;
+    }
+
+    /* 이미지 처리 */
+    img {
+        max-width: 100%;
+        height: auto;
+        page-break-inside: avoid;
+    }
+
+    /* 인쇄 전용 콘텐츠에만 텍스트 섀도우 제거 */
+    #print-container * {
+        text-shadow: none !important;
+    }
+    
+    /* 인쇄 시 버튼 숨기기 */
+    .btn-3d, .icon-btn, #pronunciation-btn {
+        display: none !important;
+    }
+}

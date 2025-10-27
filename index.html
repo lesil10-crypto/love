@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Vocabulary Builder</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script src="https://unpkg.com/lucide-icons@0.378.0/dist/lucide.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+<body class="bg-slate-100 text-gray-800">
+
+    <div id="auth-container" class="fixed inset-0 bg-slate-100 z-[100] flex items-center justify-center hidden">
+        <div class="card p-8 text-center">
+            <h2 class="text-2xl font-bold mb-4">로그인이 필요합니다</h2>
+            <p class="mb-6 text-gray-600">모든 기능을 사용하려면 Google 계정으로 로그인하세요.</p>
+            <button id="google-login-btn" class="btn-3d !bg-blue-500 !text-white hover:!bg-blue-600 flex items-center justify-center w-full" onclick="signInWithGoogle()">
+                <svg class="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><path id="a" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></defs><clipPath id="b"><use xlink:href="#a" overflow="visible"/></clipPath><path clip-path="url(#b)" fill="#FBBC05" d="M0 37V11l17 13z"/><path clip-path="url(#b)" fill="#EA4335" d="M0 11l17 13 7-6.1L48 14V0H0z"/><path clip-path="url(#b)" fill="#34A853" d="M0 37l30-23 7.9 1L48 0v48H0z"/><path clip-path="url(#b)" fill="#4285F4" d="M48 48L17 24l-4-3 35-10z"/></svg>
+                Google 계정으로 로그인
+            </button>
+        </div>
+    </div>
+
+    <div id="app-container" style="visibility: hidden;">
+        <div class="max-w-4xl mx-auto p-4 pb-24">
+            <header class="text-center my-8 flex flex-col sm:flex-row justify-center items-center gap-4">
+                <div>
+                    <h1 class="text-4xl font-bold text-gray-700" style="text-shadow: 2px 2px 4px #d1d9e6;">AI Vocabulary Builder</h1>
+                    <p class="text-gray-500 mt-2">AI와 함께 단어의 모든 것을 탐험하세요</p>
+                </div>
+                <div id="auth-status" class="card !p-3 !mb-0 ml-0 sm:ml-4 flex items-center gap-2">
+                    <span class="text-sm">로그인 정보를 확인 중...</span>
+                </div>
+            </header>
+
+            <div id="search-bar-container" class="card p-6 mb-8 sticky top-4 z-10">
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <input
+                        type="text"
+                        id="search-input"
+                        placeholder="Google 로그인이 필요합니다..."
+                        class="w-full px-4 py-3 text-lg border-2 border-slate-300 bg-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition cursor-pointer disabled:cursor-not-allowed"
+                        disabled 
+                    >
+                    <button id="search-button" class="btn-3d w-full sm:w-auto" onclick="checkSearchAccess()">
+                        <i data-lucide="search" class="inline-block mr-2"></i> 검색
+                    </button>
+                </div>
+            </div>
+
+            <div id="shortcut-buttons" class="card p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <a href="https://www.naver.com" target="_blank" class="btn-3d flex flex-col items-center justify-center p-3 text-green-600 !p-2 !text-sm">
+                    <svg class="w-6 h-6 mb-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="2" y="2" width="20" height="20" rx="4" fill="#03C75A"/>
+                        <path d="M12 7V17M12 7L10 9M12 7L14 9M10 17H14" stroke="#e0e5ec" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="12" cy="12" r="11" fill="none" stroke="#03C75A" stroke-width="2"/>
+                    </svg>
+                    네이버
+                </a>
+                <a href="https://www.google.com" target="_blank" class="btn-3d flex flex-col items-center justify-center p-3 text-blue-600 !p-2 !text-sm">
+                    <i data-lucide="globe-2" class="w-5 h-5 mb-1 text-blue-500" style="text-shadow: 1px 1px 1px #e0e5ec, -1px -1px 1px #c5c9d2;"></i>
+                    Google
+                </a>
+                <a href="https://www.youtube.com" target="_blank" class="btn-3d flex flex-col items-center justify-center p-3 text-red-600 !p-2 !text-sm">
+                    <i data-lucide="youtube" class="w-5 h-5 mb-1 text-red-600" style="text-shadow: 1px 1px 1px #e0e5ec, -1px -1px 1px #c5c9d2;"></i>
+                    YouTube
+                </a>
+                <a href="https://www.clien.net" target="_blank" class="btn-3d flex flex-col items-center justify-center p-3 text-gray-700 !p-2 !text-sm">
+                    <i data-lucide="message-square" class="w-5 h-5 mb-1 text-blue-900" style="text-shadow: 1px 1px 1px #e0e5ec, -1px -1px 1px #c5c9d2;"></i>
+                    Clien
+                </a>
+            </div>
+
+            <div id="google-calendar" class="card p-6">
+                <h3 class="text-2xl font-bold mb-4 flex items-center text-blue-700">
+                    <i data-lucide="calendar" class="mr-2 text-blue-500"></i>Google 캘린더
+                </h3>
+                <div class="w-full h-[600px] rounded-lg overflow-hidden border-2 border-slate-200">
+                     <iframe src="https://calendar.google.com/calendar/embed?height=600&wkst=1&ctz=Asia%2FSeoul&showPrint=0&src=bGVzaWwxMEBnbWFpbC5jb20&src=aGs2Y2Qzb2ZoYmc3NHRuajA2cjFzNGUxaWNAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ&src=a28uc291dGhfa29yZWEjaG9saWRheUBncm91cC52LmNhbGVuZGFyLmdvb2dsZS5jb20&color=%23e67c73&color=%238e24aa&color=%237986cb" style="border:solid 1px #777" width="100%" height="100%" frameborder="0" scrolling="no"></iframe>
+                </div>
+            </div>
+
+            <div id="loading-container" class="hidden text-center my-10">
+                <div class="loader mx-auto"></div>
+                <p id="loading-text" class="mt-4 text-gray-600 font-semibold"></p>
+                <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                    <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div id="tab-bar" class="flex flex-wrap items-end border-b-2 border-slate-300 mb-4"></div>
+
+            <main id="tab-content-container"></main>
+
+            <div id="print-only-modal-content" class="hidden"></div>
+        </div>
+
+        <footer class="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm shadow-t border-t-2 border-slate-200 z-50">
+            <div class="max-w-4xl mx-auto flex justify-around p-2">
+                <button id="word-list-btn" class="flex flex-col items-center text-gray-600 hover:text-blue-600 transition-colors">
+                    <i data-lucide="list-checks"></i>
+                    <span class="text-xs font-medium">단어 목록</span>
+                </button>
+                <button id="sentence-list-btn" class="flex flex-col items-center text-gray-600 hover:text-blue-600 transition-colors">
+                    <i data-lucide="save-all"></i>
+                    <span class="text-xs font-medium">예문 저장</span>
+                </button>
+                <button id="file-storage-btn" class="flex flex-col items-center text-gray-600 hover:text-blue-600 transition-colors">
+                    <i data-lucide="folder-archive"></i>
+                    <span class="text-xs font-medium">파일 보관함</span>
+                </button>
+                <button id="share-btn" class="flex flex-col items-center text-gray-600 hover:text-blue-600 transition-colors">
+                    <i data-lucide="share-2"></i>
+                    <span class="text-xs font-medium">공유하기</span>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <div id="modal-container" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50 modal" onclick="hideModal(event)">
+        <div id="modal-content" class="bg-slate-100 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8 card !mb-0" onclick="event.stopPropagation()"></div>
+    </div>
+
+    <div id="image-modal-container" class="fixed inset-0 bg-black bg-opacity-80 hidden items-center justify-center p-4 z-[60] modal" onclick="hideImageModal()">
+        <img id="modal-image" src="" class="max-w-full max-h-full object-contain rounded-lg" onclick="event.stopPropagation()">
+        <button onclick="hideImageModal()" class="absolute top-4 right-4 text-white hover:text-gray-300 transition" aria-label="Close image view">
+            <i data-lucide="x" class="w-10 h-10"></i>
+        </button>
+    </div>
+
+    <div id="list-modal-container" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50 modal" onclick="hideListModal(event)">
+        <div class="bg-slate-100 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col card !mb-0" onclick="event.stopPropagation()">
+            <div id="list-modal-header" class="p-4 border-b border-slate-300 flex justify-between items-center">
+                <h2 id="list-modal-title" class="text-xl font-bold"></h2>
+                <button onclick="hideListModal()" class="text-gray-500 hover:text-gray-800"><i data-lucide="x"></i></button>
+            </div>
+            <div class="p-4 flex flex-wrap gap-2 justify-between items-center bg-slate-200 border-b border-slate-300">
+                <div>
+                    <select id="sort-options" class="px-3 py-1.5 border border-slate-300 rounded-md bg-white"></select>
+                </div>
+                <div id="list-actions" class="flex flex-wrap gap-2">
+                    <button id="mark-read-btn" class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 disabled:bg-gray-400" disabled>읽음으로</button>
+                    <button id="mark-unread-btn" class="text-sm bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 disabled:bg-gray-400" disabled>읽지 않음으로</button>
+                    <button id="delete-selected-btn" class="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 disabled:bg-gray-400" disabled>선택 삭제</button>
+                </div>
+            </div>
+            <div id="list-modal-content" class="p-6 overflow-y-auto flex-grow"></div>
+        </div>
+    </div>
+
+    <div id="file-modal-container" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-50 modal" onclick="hideFileModal(event)">
+        <div class="bg-slate-100 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col card !mb-0" onclick="event.stopPropagation()">
+            <div class="p-4 border-b border-slate-300 flex justify-between items-center">
+                <h2 class="text-xl font-bold">파일 보관함</h2>
+                <button onclick="hideFileModal()" class="text-gray-500 hover:text-gray-800"><i data-lucide="x"></i></button>
+            </div>
+            <div class="p-6 border-b border-slate-300">
+                <h3 class="font-semibold mb-2">새 파일 올리기 (50MB 이하)</h3>
+                <input type="file" id="file-upload-input" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                <button id="file-upload-button" class="btn-3d mt-4 w-full">업로드</button>
+                <div id="upload-progress-container" class="hidden mt-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="upload-progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="file-list" class="p-6 overflow-y-auto flex-grow"></div>
+        </div>
+    </div>
+
+    <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-[70] modal">
+        <div class="bg-slate-100 rounded-2xl shadow-2xl max-w-sm w-full p-6 card !mb-0">
+            <h3 id="confirmation-title" class="text-lg font-bold mb-4">확인</h3>
+            <p id="confirmation-message" class="mb-6">이 작업을 정말로 실행하시겠습니까?</p>
+            <div class="flex justify-end gap-4">
+                <button id="confirm-cancel-btn" class="btn-3d">취소</button>
+                <button id="confirm-ok-btn" class="btn-3d !bg-red-500 !text-white hover:!bg-red-600">확인</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="toast-container" class="toast fixed bottom-24 right-5 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg">
+        <p id="toast-message"></p>
+    </div>
+
+    <div id="word-tooltip" class="hidden absolute z-[100] px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-sm"></div>
+
+    <div id="print-container" style="display: none;">
+        <div class="print-header">
+            <h1 class="text-4xl">AI Vocabulary Builder</h1>
+            <p>AI와 함께 단어의 모든 것을 탐험하세요</p>
+            <hr style="border: 1px solid #ccc; margin-top: 10px;">
+        </div>
+        <div id="print-content-area"></div>
+    </div>
+
+    <script type="module" src="script.js"></script>
+    
+</body>
+</html>

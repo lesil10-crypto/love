@@ -181,7 +181,7 @@ async function initializeFirebase() {
                     try {
                                     console.log("Initializing App Check...");
                                                     const appCheck = initializeAppCheck(app, {
-                                                                        provider: new ReCaptchaV3Provider('6Lck_grAAAAAAC6M9PNrrqmJzJGJWm91QDRD5hJO'), // reCAPTCHA v3 공개 사이트 키
+                                                                        provider: new ReCaptchaV3Provider('6LfaLfkrAAAAANOgdb5KbC1aqoAdKqi8TJGXl8C9'), // reCAPTCHA v3 공개 사이트 키
                                                                                             isTokenAutoRefreshEnabled: true
                                                                                                             });
                                                                                                                             console.log("App Check initialized.");

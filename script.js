@@ -17,7 +17,6 @@ const USER_FIREBASE_CONFIG = {
  appId: "1:376464552007:web:929b53196fc86af19dc162",
  measurementId: "G-HMKJMNFGM4"
 };
-const USER_GEMINI_API_KEY = "AIzaSyBsTBlWh5H5BTyNx4vw40rhVlqzbYBsf2k";
 // =========================================================================
 
 // 0. Initial Setup & Variable Declaration
@@ -257,35 +256,44 @@ window.signInWithGoogle = async function() {
 // 1. API Communication Functions
 // ---------------------------
 async function fetchWithRetry(baseUrl, payload, retries = 3) {
-    if (!apiKey) {
-         showToast("Google AI API 키가 설정되지 않았습니다.", "error");
-         throw new Error("Google AI API Key is missing.");
-    }
-    const finalUrl = `${baseUrl}?key=${apiKey}`;
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(finalUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (!response.ok) {
-                const errorBody = await response.text();
-                console.error(`API Error Response: ${response.status} - ${errorBody}`);
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return await response.json();
-        } catch (error) {
-            if (i === retries - 1) {
-                console.error("API call failed after retries:", error);
-                showToast("AI 서버 응답에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
-                throw error;
-            }
-            const delay = 1000 * Math.pow(2, i) + Math.random() * 1000;
-            await new Promise(res => setTimeout(res, delay));
-        }
-    }
-}
+  // baseUrl = "https://generativelanguage..." (원래 Google 주소)
+    // payload = { contents: [...] } (원래 Gemini 요청 내용)
+
+      // 이제 Google이 아닌, Vercel에 배포된 우리 서버 주소를 호출합니다.
+        // '/api/callGemini'는 Vercel이 자동으로 인식하는 주소입니다.
+          const OUR_BACKEND_API = '/api/callGemini'; 
+
+            for (let i = 0; i < retries; i++) {
+                try {
+                      const response = await fetch(OUR_BACKEND_API, {
+                              method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({
+                                                        googleApiUrl: baseUrl, // "이 주소로 대신 요청해줘"
+                                                                  payload: payload       // "이 내용을 담아서"
+                                                                          })
+                                                                                });
+
+                                                                                      if (!response.ok) {
+                                                                                              const errorBody = await response.text();
+                                                                                                      console.error(`백엔드 서버 오류: ${response.status} - ${errorBody}`);
+                                                                                                              throw new Error(`HTTP error! status: ${response.status}`);
+                                                                                                                    }
+
+                                                                                                                          // Vercel 서버가 Google로부터 받아온 응답(JSON)을 반환합니다.
+                                                                                                                                return await response.json(); 
+
+                                                                                                                                    } catch (error) {
+                                                                                                                                          if (i === retries - 1) {
+                                                                                                                                                  console.error("API 호출 최종 실패:", error);
+                                                                                                                                                          showToast("AI 서버 응답에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
+                                                                                                                                                                  throw error;
+                                                                                                                                                                        }
+                                                                                                                                                                              const delay = 1000 * Math.pow(2, i) + Math.random() * 1000;
+                                                                                                                                                                                    await new Promise(res => setTimeout(res, delay));
+                                                                                                                                                                                        }
+                                                                                                                                                                                          }
+                                                                                                                                                                                          }
 
 async function callGemini(prompt, isJson = false, base64Image = null) {
     const parts = [{ text: prompt }];

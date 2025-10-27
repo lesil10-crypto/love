@@ -4,7 +4,7 @@ import { getAuth, signInAnonymously, GoogleAuthProvider, signInWithPopup, onAuth
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, writeBatch, getDocs, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 // [NEW] Added uploadBytes
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadBytes } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-
+import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app-check.js";
 // === GitHub Pages 배포를 위한 하드코딩된 설정 ===
 // [SECURITY WARNING] 이 키들은 클라이언트 사이드에 노출되면 안 됩니다. 
 // Github Pages에서는 Firebase App Check와 Firestore 보안 규칙으로 데이터를 보호해야 합니다.
@@ -177,6 +177,19 @@ async function initializeFirebase() {
         auth = getAuth(app);
         storage = getStorage(app);
         setLogLevel('debug'); // 'info' or 'debug' for more logs
+        // ⬇️⬇️⬇️ [새로 추가] App Check 초기화 ⬇️⬇️⬇️
+                    try {
+                                    console.log("Initializing App Check...");
+                                                    const appCheck = initializeAppCheck(app, {
+                                                                        provider: new ReCaptchaV3Provider('6Lck_grAAAAAAC6M9PNrrqmJzJGJWm91QDRD5hJO'), // reCAPTCHA v3 공개 사이트 키
+                                                                                            isTokenAutoRefreshEnabled: true
+                                                                                                            });
+                                                                                                                            console.log("App Check initialized.");
+                                                                                                                                        } catch (appCheckError) {
+                                                                                                                                                        console.error("App Check Initialization Error:", appCheckError);
+                                                                                                                                                                        showToast("보안 모듈(App Check) 초기화에 실패했습니다.", "error");
+                                                                                                                                                                                    }
+                                                                                                                                                                                                // ⬆️⬆️⬆️ [여기까지 새로 추가] ⬆️⬆️⬆️
 
         // [MODIFIED] Using Google Auth instead of Anonymous
         // Listen for auth state changes

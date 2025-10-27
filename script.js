@@ -190,10 +190,7 @@ async function initializeFirebase() {
                                                                                                                                                                         showToast("보안 모듈(App Check) 초기화에 실패했습니다.", "error");
                                                                                                                                                                                     }
                                                                                                                                                                                                 // ⬆️⬆️⬆️ [여기까지 새로 추가] ⬆️⬆️⬆️
-
-        // [MODIFIED] Using Google Auth instead of Anonymous
-        // Listen for auth state changes
-        onAuthStateChanged(auth, (user) => {
+     onAuthStateChanged(auth, (user) => {
             if (user) {
                 // User is signed in
                 userId = user.uid;
@@ -241,6 +238,10 @@ async function initializeFirebase() {
             }
             safeCreateIcons();
         });
+
+        // [MODIFIED] Using Google Auth instead of Anonymous
+        // Listen for auth state changes
+        
 
     } catch (error) {
         console.error("Firebase Initialization Error: ", error);

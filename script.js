@@ -9,7 +9,7 @@ import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com
 // [SECURITY WARNING] 이 키들은 클라이언트 사이드에 노출되면 안 됩니다. 
 // Github Pages에서는 Firebase App Check와 Firestore 보안 규칙으로 데이터를 보호해야 합니다.
 const USER_FIREBASE_CONFIG = {
- apiKey: "AIzaSyBsTBlWh5H5BTyNx4vw40rhVlqzbYBsf2k",
+ apiKey: "AIzaSyDKmpQO6htm7jZ2DByUfGnmocZP7dpTJhs",
  authDomain: "projec-48c55.firebaseapp.com",
  projectId: "projec-48c55",
  storageBucket: "projec-48c55.firebasestorage.app",

@@ -29,8 +29,6 @@ const searchBarContainer = document.getElementById('search-bar-container');
 
 const printContainer = document.getElementById('print-container');
 const printContentArea = document.getElementById('print-content-area');
-
-const apiKey = USER_GEMINI_API_KEY;
 const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
 const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict`;
 

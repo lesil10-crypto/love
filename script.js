@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 // [NEW] Google Auth import
-import { getAuth, signInAnonymously, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getAuth, signInAnonymously, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, writeBatch, getDocs, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 // [NEW] Added uploadBytes
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadBytes } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
@@ -188,6 +188,24 @@ async function initializeFirebase() {
                                                                                                                                                                         showToast("보안 모듈(App Check) 초기화에 실패했습니다.", "error");
                                                                                                                                                                                     }
                                                                                                                                                                                                 // ⬆️⬆️⬆️ [여기까지 새로 추가] ⬆️⬆️⬆️
+                 // [NEW] Handle Google Login Redirect Result
+            // 사용자가 Google 로그인을 마치고 돌아왔는지 확인합니다.
+            try {
+                const result = await getRedirectResult(auth);
+                if (result && result.user) {
+                    // Google 로그인을 통해 성공적으로 돌아온 경우
+                    console.log("Google Sign-In via redirect successful:", result.user.displayName);
+                    showToast(`${result.user.displayName}님, 환영합니다!`, "success");
+                    // onAuthStateChanged가 이어서 처리할 것입니다.
+                }
+            } catch (error) {
+                // 사용자가 팝업을 닫은 경우(auth/popup-closed-by-user) 외의 오류 처리
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    console.error("Google Sign-In Redirect Result Error:", error);
+                    showToast("Google 로그인 처리에 실패했습니다.", "error");
+                }
+            }
+
      onAuthStateChanged(auth, (user) => {
             if (user) {
                 // User is signed in
@@ -250,16 +268,15 @@ async function initializeFirebase() {
 }
 
 // [NEW] Google Sign-In Function
+// [NEW] Google Sign-In Function (Redirect method)
 window.signInWithGoogle = async function() {
     const provider = new GoogleAuthProvider();
     try {
-        const result = await signInWithPopup(auth, provider);
-        // This will trigger the onAuthStateChanged listener
-        console.log("Google Sign-In successful:", result.user.displayName);
-        showToast(`${result.user.displayName}님, 환영합니다!`, "success");
+        // 팝업 대신, 페이지 전체를 Google 로그인으로 이동시킵니다.
+        await signInWithRedirect(auth, provider);
     } catch (error) {
-        console.error("Google Sign-In Error:", error);
-        showToast("Google 로그인에 실패했습니다. 팝업을 확인해주세요.", "error");
+        console.error("Google Sign-In Redirect Error:", error);
+        showToast("Google 로그인 페이지로 이동하는 데 실패했습니다.", "error");
     }
 }
 

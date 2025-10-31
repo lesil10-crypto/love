@@ -4,7 +4,6 @@ import { getAuth, signInAnonymously, GoogleAuthProvider, signInWithRedirect, get
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, writeBatch, getDocs, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 // [NEW] Added uploadBytes
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadBytes } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app-check.js";
 // === GitHub Pages 배포를 위한 하드코딩된 설정 ===
 // [SECURITY WARNING] 이 키들은 클라이언트 사이드에 노출되면 안 됩니다. 
 // Github Pages에서는 Firebase App Check와 Firestore 보안 규칙으로 데이터를 보호해야 합니다.

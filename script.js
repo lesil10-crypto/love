@@ -173,20 +173,7 @@ async function initializeFirebase() {
         db = getFirestore(app);
         auth = getAuth(app);
         storage = getStorage(app);
-        setLogLevel('debug'); // 'info' or 'debug' for more logs
-        // ⬇️⬇️⬇️ [새로 추가] App Check 초기화 ⬇️⬇️⬇️
-                    try {
-                                    console.log("Initializing App Check...");
-                                                    const appCheck = initializeAppCheck(app, {
-                                                                        provider: new ReCaptchaV3Provider('6LfGy_srAAAAANDqC9OWvrq1gS0ThExaCenarGjz'), // reCAPTCHA v3 공개 사이트 키
-                                                                                            isTokenAutoRefreshEnabled: true
-                                                                                                            });
-                                                                                                                            console.log("App Check initialized.");
-                                                                                                                                        } catch (appCheckError) {
-                                                                                                                                                        console.error("App Check Initialization Error:", appCheckError);
-                                                                                                                                                                        showToast("보안 모듈(App Check) 초기화에 실패했습니다.", "error");
-                                                                                                                                                                                    }
-                                                                                                                                                                                                // ⬆️⬆️⬆️ [여기까지 새로 추가] ⬆️⬆️⬆️
+        setLogLevel('debug'); // 'info' or 'debug' for more logs                                                                                                                                                                           // ⬆️⬆️⬆️ [여기까지 새로 추가] ⬆️⬆️⬆️
                  // [NEW] Handle Google Login Redirect Result
             // 사용자가 Google 로그인을 마치고 돌아왔는지 확인합니다.
             try {

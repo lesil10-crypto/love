@@ -19,15 +19,14 @@ const USER_FIREBASE_CONFIG = {
 // =========================================================================
 
 // 0. Initial Setup & Variable Declaration
-const searchInput = document.getElementById('search-input');
-const searchButton = document.getElementById('search-button');
-const loadingContainer = document.getElementById('loading-container');
-const loadingText = document.getElementById('loading-text');
-const progressBar = document.getElementById('progress-bar');
-const searchBarContainer = document.getElementById('search-bar-container');
+// ⭐️ [수정됨] const ... getElementById(...) 를 모두 let으로 변경
+let searchInput, searchButton, loadingContainer, loadingText, progressBar, searchBarContainer,
+    printContainer, printContentArea, modalContainer, modalContent, imageModalContainer,
+    modalImage, wordTooltip, fileModalContainer, fileUploadInput, fileUploadButton,
+    listModalContainer, listModalTitle, listModalContent, sortOptions, markReadBtn,
+    markUnreadBtn, deleteSelectedBtn, confirmCallback, confirmationModal,
+    confirmationMessage, confirmOkBtn, confirmCancelBtn;
 
-const printContainer = document.getElementById('print-container');
-const printContentArea = document.getElementById('print-content-area');
 const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
 const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict`;
 
@@ -161,6 +160,37 @@ async function uploadBase64Image(base64String, storagePath) {
 // =========================================================================
 
 async function initializeFirebase() {
+    // ⭐️ [수정됨] DOM 요소 변수들을 여기서 할당합니다. (DOMContentLoaded 이후)
+    searchInput = document.getElementById('search-input');
+    searchButton = document.getElementById('search-button');
+    loadingContainer = document.getElementById('loading-container');
+    loadingText = document.getElementById('loading-text');
+    progressBar = document.getElementById('progress-bar');
+    searchBarContainer = document.getElementById('search-bar-container');
+    printContainer = document.getElementById('print-container');
+    printContentArea = document.getElementById('print-content-area');
+    modalContainer = document.getElementById('modal-container');
+    modalContent = document.getElementById('modal-content');
+    imageModalContainer = document.getElementById('image-modal-container');
+    modalImage = document.getElementById('modal-image');
+    wordTooltip = document.getElementById('word-tooltip');
+    fileModalContainer = document.getElementById('file-modal-container');
+    fileUploadInput = document.getElementById('file-upload-input');
+    fileUploadButton = document.getElementById('file-upload-button');
+    listModalContainer = document.getElementById('list-modal-container');
+    listModalTitle = document.getElementById('list-modal-title');
+    listModalContent = document.getElementById('list-modal-content');
+    sortOptions = document.getElementById('sort-options');
+    markReadBtn = document.getElementById('mark-read-btn');
+    markUnreadBtn = document.getElementById('mark-unread-btn');
+    deleteSelectedBtn = document.getElementById('delete-selected-btn');
+    confirmationModal = document.getElementById('confirmation-modal');
+    confirmationMessage = document.getElementById('confirmation-message');
+    confirmOkBtn = document.getElementById('confirm-ok-btn');
+    confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+    confirmCallback = null;
+    // ⭐️ [여기까지 수정]
+
     const firebaseConfig = USER_FIREBASE_CONFIG;
     try {
         if (!firebaseConfig.apiKey) {
@@ -216,6 +246,11 @@ async function initializeFirebase() {
                 loadUserLists();
                 listenForFiles();
 
+                // 팁: 인증 핸들러 페이지에 있다면 메인 페이지로 이동시킵니다.
+                if (window.location.pathname.startsWith('/__/auth/handler')) {
+                    window.history.replaceState({}, document.title, '/');
+                }
+
             } else {
                 // User is signed out
                 userId = null;
@@ -251,7 +286,91 @@ async function initializeFirebase() {
         document.getElementById('app-container').style.visibility = 'visible';
         document.getElementById('auth-container').classList.add('hidden'); // Hide auth on error
     }
-}
+
+    // ⭐️ [수정됨] 모든 이벤트 리스너를 이곳으로 이동
+    confirmOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } hideConfirmationModal(); });
+    confirmCancelBtn.addEventListener('click', hideConfirmationModal);
+
+    fileUploadButton.addEventListener('click', () => { 
+        if (!auth || !auth.currentUser) { showToast("Firebase에 연결되지 않았습니다.", "error"); return; } 
+        const file = fileUploadInput.files[0]; 
+        if (!file) { showToast("파일을 선택해주세요.", "warning"); return; } 
+        if (file.size > 50 * 1024 * 1024) { showToast("파일 크기는 50MB를 초과할 수 없습니다.", "error"); return; } 
+        const storagePath = `artifacts/${appId}/users/${userId}/files/${file.name}`; 
+        const storageRef = ref(storage, storagePath); 
+        const uploadProgressContainer = document.getElementById('upload-progress-container'); 
+        const uploadProgressBar = document.getElementById('upload-progress-bar'); 
+        uploadProgressContainer.classList.remove('hidden'); 
+        fileUploadButton.disabled = true; 
+        const uploadTask = uploadBytesResumable(storageRef, file); 
+        uploadTask.on('state_changed', 
+            (snapshot) => { const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100; uploadProgressBar.style.width = progress + '%'; }, 
+            (error) => { console.error("Upload failed. Firebase Error Code:", error.code); console.error("Full Error:", error); showToast(`파일 업로드 실패: ${error.code}`, "error"); uploadProgressContainer.classList.add('hidden'); uploadProgressBar.style.width = '0%'; fileUploadButton.disabled = false; }, 
+            async () => { 
+                let firestoreError = null; 
+                try { 
+                    const metadata = uploadTask.snapshot.metadata; 
+                    await addDoc(collection(db, `artifacts/${appId}/users/${userId}/file_metadata`), { name: metadata.name, fullPath: metadata.fullPath, size: metadata.size, contentType: metadata.contentType, timestamp: new Date() }); 
+                } catch (error) { 
+                    firestoreError = error; console.error("Firestore metadata save error:", error.code, error.message); showToast(`파일 정보 저장 실패: ${error.code}`, "error"); 
+                    await deleteObject(uploadTask.snapshot.ref).catch(err => console.error("Orphaned file cleanup failed:", err)); 
+                } finally { 
+                    uploadProgressContainer.classList.add('hidden'); uploadProgressBar.style.width = '0%'; fileUploadInput.value = ''; fileUploadButton.disabled = false; 
+                    if (!firestoreError) { showToast("파일 업로드 성공.", "success"); } 
+                } 
+            }
+        ); 
+    });
+
+    listModalContent.addEventListener('change', (e) => { if (e.target.classList.contains('item-checkbox')) { updateListActionButtonsState(); } });
+
+    document.addEventListener('mouseover', async (e) => { 
+        if (e.target.classList.contains('clickable-word') && userId) { 
+            const word = e.target.textContent.trim().replace(/[^a-zA-Z-]/g, ''); 
+            if (!word) return; 
+            const translation = await translateWordOnHover(word); 
+            wordTooltip.textContent = translation; 
+            wordTooltip.classList.remove('hidden'); 
+            const rect = e.target.getBoundingClientRect(); 
+            wordTooltip.style.left = `${rect.left + window.scrollX + rect.width / 2 - wordTooltip.offsetWidth / 2}px`; 
+            wordTooltip.style.top = `${rect.top + window.scrollY - wordTooltip.offsetHeight - 5}px`; 
+        } 
+    });
+
+    document.addEventListener('mouseout', (e) => { if (e.target.classList.contains('clickable-word')) { wordTooltip.classList.add('hidden'); } });
+
+    document.addEventListener('click', (e) => { 
+        if (e.target.classList.contains('clickable-word') && userId) { 
+            const word = e.target.textContent.trim().replace(/[^a-zA-Z-]/g, ''); 
+            if (word) { 
+                searchInput.value = word; 
+                checkAndLoadPage(word); 
+                hideListModal(); 
+            } 
+        } 
+        const listItemTarget = e.target.closest('.searchable-list-item'); 
+        if (listItemTarget) { 
+            const word = listItemTarget.dataset.word; 
+            if(word) {
+                searchInput.value = word;
+                checkAndLoadPage(word); 
+                hideListModal(); 
+            }
+        }
+    });
+
+    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && userId) { handleSearch(searchInput.value.trim()); } });
+    document.getElementById('word-list-btn').addEventListener('click', () => showListModal('words'));
+    document.getElementById('sentence-list-btn').addEventListener('click', () => showListModal('sentences'));
+    document.getElementById('file-storage-btn').addEventListener('click', showFileModal);
+    document.getElementById('share-btn').addEventListener('click', () => { if(navigator.share) { navigator.share({ title: 'AI Vocabulary Builder', text: 'AI와 함께 새로운 단어를 배워보세요!', url: window.location.href }).catch(err => console.error("Share failed", err)); } else { try { navigator.clipboard.writeText(window.location.href); showToast("링크가 클립보드에 복사되었습니다.", "success"); } catch (err) { console.error("Clipboard write failed:", err); showToast("클립보드 복사 실패.", "error"); } } });
+    sortOptions.addEventListener('change', (e) => { currentSort = e.target.value; renderList(); });
+    markReadBtn.addEventListener('click', () => performBulkAction('mark-read'));
+    markUnreadBtn.addEventListener('click', () => performBulkAction('mark-unread')); // [FIXED]
+    deleteSelectedBtn.addEventListener('click', () => performBulkAction('delete'));
+    // ⭐️ [여기까지 수정]
+
+} // <-- initializeFirebase 함수 끝
 
 // [NEW] Google Sign-In Function
 // [NEW] Google Sign-In Function (Redirect method)
@@ -734,17 +853,7 @@ window.startPronunciationCheck = function(word) { const feedbackDiv = document.g
 // ---------------------------
 // 5. Modal and Tooltip Functions
 // ---------------------------
-const modalContainer = document.getElementById('modal-container');
-const modalContent = document.getElementById('modal-content');
-const imageModalContainer = document.getElementById('image-modal-container');
-const modalImage = document.getElementById('modal-image');
-const wordTooltip = document.getElementById('word-tooltip');
-const fileModalContainer = document.getElementById('file-modal-container');
-let confirmCallback = null;
-const confirmationModal = document.getElementById('confirmation-modal');
-const confirmationMessage = document.getElementById('confirmation-message');
-const confirmOkBtn = document.getElementById('confirm-ok-btn');
-const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+// ⭐️ [수정됨] 변수 선언이 파일 상단으로 이동됨
 
 // [REMOVED] All password modal variables and functions (showPasswordModalIfNeeded, showPasswordModal, hidePasswordModal, handlePasswordSubmit)
 
@@ -799,8 +908,8 @@ window.showFileModal = function() { fileModalContainer.classList.remove('hidden'
 window.hideFileModal = function(event) { if (event && event.currentTarget !== event.target && !event.target.closest('button')) return; fileModalContainer.classList.add('hidden'); fileModalContainer.classList.remove('flex'); }
 function showConfirmationModal(message, onConfirm) { confirmationMessage.textContent = message; confirmCallback = onConfirm; confirmationModal.classList.remove('hidden'); confirmationModal.classList.add('flex'); }
 function hideConfirmationModal() { confirmationModal.classList.add('hidden'); confirmationModal.classList.remove('flex'); confirmCallback = null; }
-confirmOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } hideConfirmationModal(); });
-confirmCancelBtn.addEventListener('click', hideConfirmationModal);
+// ⭐️ [수정됨] confirmOkBtn/confirmCancelBtn 리스너가 initializeFirebase 함수 내부로 이동
+
 // 6. Firestore Data Management
 // [NEW] Save full page data
 window.saveCurrentPage = async function(tabId) {
@@ -924,14 +1033,15 @@ async function addWordToHistory(word, meaning) { if (!db || !userId) return; con
 window.saveSentence = async function(en, ko) { if (!db || !userId) { showToast("데이터베이스에 연결되지 않았습니다.", "error"); return; } try { const sentenceRef = collection(db, `artifacts/${appId}/users/${userId}/saved_sentences`); await addDoc(sentenceRef, { en, ko, timestamp: new Date(), read: false }); showToast("예문이 저장되었습니다.", "success"); } catch (e) { console.error("Error saving sentence: ", e); showToast("예문 저장에 실패했습니다.", "error"); } }
 
 // 7. Saved List Modal UI (No changes needed)
-const listModalContainer = document.getElementById('list-modal-container'); const listModalTitle = document.getElementById('list-modal-title'); const listModalContent = document.getElementById('list-modal-content'); const sortOptions = document.getElementById('sort-options'); const markReadBtn = document.getElementById('mark-read-btn'); const markUnreadBtn = document.getElementById('mark-unread-btn'); const deleteSelectedBtn = document.getElementById('delete-selected-btn'); let currentListType = ''; let currentSort = 'newest';
+// ⭐️ [수정됨] listModal... 변수 선언이 파일 상단으로 이동됨
+let currentListType = ''; let currentSort = 'newest';
 function showListModal(type) { currentListType = type; listModalContainer.classList.remove('hidden'); listModalContainer.classList.add('flex'); if (type === 'words') { listModalTitle.textContent = '단어 목록 (검색 기록)'; sortOptions.innerHTML = `<option value="newest">최신순</option><option value="alphabetical">알파벳순</option>`; } else { listModalTitle.textContent = '저장된 예문 목록'; sortOptions.innerHTML = `<option value="newest">최신순</option><option value="length">길이순</option>`; } sortOptions.value = currentSort; renderList(); updateListActionButtonsState(); }
 function renderList() { let items = currentListType === 'words' ? [...savedWords] : [...savedSentences]; items.sort((a, b) => { if (!a.timestamp || !b.timestamp) return 0; const timeA = a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime(); const timeB = b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime(); return timeB - timeA; }); if (currentSort === 'alphabetical' && currentListType === 'words') { items.sort((a, b) => a.word.localeCompare(b.word)); } else if (currentSort === 'length' && currentListType === 'sentences') { items.sort((a, b) => a.en.length - b.en.length); } if (items.length === 0) { listModalContent.innerHTML = `<p class="text-center text-gray-500">저장된 항목이 없습니다.</p>`; return; } listModalContent.innerHTML = items.map(item => { const readClass = item.read ? 'opacity-50' : ''; const baseHtml = `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-200 ${readClass}" data-id="${item.id}"><div class="flex items-center flex-grow min-w-0"><input type="checkbox" class="mr-4 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 item-checkbox" data-id="${item.id}"><div class="flex-grow min-w-0">`; if (currentListType === 'words') { return baseHtml + `<p class="font-bold text-lg searchable-list-item cursor-pointer hover:underline" data-word="${item.word}">${item.word}</p><p class="truncate">${item.meaning}</p></div></div><div class="flex items-center gap-1 flex-shrink-0"><button onclick="toggleReadStatus('${item.id}', 'words')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()} <span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button><button onclick="deleteListItem('${item.id}', 'words')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button></div></div>`; } else { return baseHtml + `<div class="truncate"><p class="font-semibold truncate">${addClickToSearch(item.en)}</p><p class="text-sm truncate">${item.ko}</p></div></div></div><div class="flex items-center gap-1 flex-shrink-0"><button class="icon-btn" onclick="speak('${item.en.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button><button onclick="toggleReadStatus('${item.id}', 'sentences')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()}<span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button><button onclick="deleteListItem('${item.id}', 'sentences')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button></div></div>`; } }).join('<hr class="my-1 border-slate-300">'); safeCreateIcons(); } window.renderList = renderList;
 function createEyeIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-gray-500"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; } function createEyeOffIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-gray-500"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path><path d="M6.61 6.61A13.16 13.16 0 0 0 2 12s3 7 10 7a9.92 9.92 0 0 0 5.43-1.61"></path><line x1="2" x2="22" y1="2" y2="22"></line></svg>`; } function createTrashIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-red-500"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M15 6V4c0-1-1-2-2-2h-2c-1 0-2 1-2 2v2"></path></svg>`; }
 window.deleteListItem = function(id, type) { showConfirmationModal("정말로 이 항목을 삭제하시겠습니까?", async () => { if (!db || !userId) return; const collectionName = type === 'words' ? 'saved_words' : 'saved_sentences'; const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${id}`); try { await deleteDoc(docRef); showToast("삭제되었습니다.", "success"); } catch (error) { console.error("Error deleting item:", error); showToast("삭제에 실패했습니다.", "error"); } }); }
 window.toggleReadStatus = async function(id, type) { if (!db || !userId) return; const collectionName = type === 'words' ? 'saved_words' : 'saved_sentences'; const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${id}`); try { const docSnap = await getDoc(docRef); if (docSnap.exists()) { const currentStatus = docSnap.data().read; await updateDoc(docRef, { read: !currentStatus }); } } catch (error) { console.error("Error toggling read status:", error); showToast("상태 변경에 실패했습니다.", "error"); } };
 function updateListActionButtonsState() { const checkedItems = listModalContent.querySelectorAll('.item-checkbox:checked'); const hasSelection = checkedItems.length > 0; markReadBtn.disabled = !hasSelection; markUnreadBtn.disabled = !hasSelection; deleteSelectedBtn.disabled = !hasSelection; }
-listModalContent.addEventListener('change', (e) => { if (e.target.classList.contains('item-checkbox')) { updateListActionButtonsState(); } });
+// ⭐️ [수정됨] listModalContent 리스너가 initializeFirebase 함수 내부로 이동
 async function performBulkAction(action) { const checkedItems = listModalContent.querySelectorAll('.item-checkbox:checked'); if (checkedItems.length === 0) { showToast("항목을 선택해주세요.", "warning"); return; } const actionText = action === 'delete' ? '삭제' : '상태 변경'; showConfirmationModal(`선택한 ${checkedItems.length}개 항목을 정말로 ${actionText}하시겠습니까?`, async () => { if (!db || !userId) return; const batch = writeBatch(db); const collectionName = currentListType === 'words' ? 'saved_words' : 'saved_sentences'; checkedItems.forEach(item => { const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${item.dataset.id}`); if (action === 'delete') { batch.delete(docRef); } else { batch.update(docRef, { read: action === 'mark-read' }); } }); try { await batch.commit(); showToast("선택한 항목들이 처리되었습니다.", "success"); } catch (error) { console.error("Bulk action failed:", error); showToast("작업에 실패했습니다.", "error"); } }); }
 window.hideListModal = function(event) { if(event) { if (event.currentTarget !== event.target && !event.target.closest('button')) return; } listModalContainer.classList.add('hidden'); listModalContainer.classList.remove('flex'); }
 
@@ -942,8 +1052,9 @@ function closeTab(tabId) { if (!tabs[tabId]) return; tabs[tabId].buttonEl.remove
 function handlePrint(tabId) { const tab = tabs[tabId]; if (!tab || !tab.fullSearchResult || !tab.fullSearchResult.encyclopediaData || !tab.fullSearchResult.fastDeepDiveData) { showToast("인쇄 데이터가 아직 준비되지 않았습니다. 모든 정보가 로딩될 때까지 기다려주세요.", "warning"); return; } const mainContentHtml = tab.contentEl.innerHTML; const encyclopediaHtml = getEncyclopediaHtml(tab.fullSearchResult.encyclopediaData.encyclopedia); const conceptTreeHtml = getConceptTreeHtml(tab.fullSearchResult.fastDeepDiveData.conceptTree); printContentArea.innerHTML = mainContentHtml + encyclopediaHtml + conceptTreeHtml; printContainer.style.display = 'block'; if (window.lucide) { printContainer.querySelectorAll('[data-lucide]').forEach(el => el.remove()); window.lucide.createIcons({ attr: 'data-lucide', element: printContainer }); } window.print(); setTimeout(() => { printContainer.style.display = 'none'; printContentArea.innerHTML = ''; }, 500); }
 
 // 9. File Storage (No changes needed)
-const fileUploadInput = document.getElementById('file-upload-input'); const fileUploadButton = document.getElementById('file-upload-button');
-fileUploadButton.addEventListener('click', () => { if (!auth || !auth.currentUser) { showToast("Firebase에 연결되지 않았습니다.", "error"); return; } const file = fileUploadInput.files[0]; if (!file) { showToast("파일을 선택해주세요.", "warning"); return; } if (file.size > 50 * 1024 * 1024) { showToast("파일 크기는 50MB를 초과할 수 없습니다.", "error"); return; } const storagePath = `artifacts/${appId}/users/${userId}/files/${file.name}`; const storageRef = ref(storage, storagePath); const uploadProgressContainer = document.getElementById('upload-progress-container'); const uploadProgressBar = document.getElementById('upload-progress-bar'); uploadProgressContainer.classList.remove('hidden'); fileUploadButton.disabled = true; const uploadTask = uploadBytesResumable(storageRef, file); uploadTask.on('state_changed', (snapshot) => { const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100; uploadProgressBar.style.width = progress + '%'; }, (error) => { console.error("Upload failed. Firebase Error Code:", error.code); console.error("Full Error:", error); showToast(`파일 업로드 실패: ${error.code}`, "error"); uploadProgressContainer.classList.add('hidden'); uploadProgressBar.style.width = '0%'; fileUploadButton.disabled = false; }, async () => { let firestoreError = null; try { const metadata = uploadTask.snapshot.metadata; await addDoc(collection(db, `artifacts/${appId}/users/${userId}/file_metadata`), { name: metadata.name, fullPath: metadata.fullPath, size: metadata.size, contentType: metadata.contentType, timestamp: new Date() }); } catch (error) { firestoreError = error; console.error("Firestore metadata save error:", error.code, error.message); showToast(`파일 정보 저장 실패: ${error.code}`, "error"); await deleteObject(uploadTask.snapshot.ref).catch(err => console.error("Orphaned file cleanup failed:", err)); } finally { uploadProgressContainer.classList.add('hidden'); uploadProgressBar.style.width = '0%'; fileUploadInput.value = ''; fileUploadButton.disabled = false; if (!firestoreError) { showToast("파일 업로드 성공.", "success"); } } }); });
+// ⭐️ [수정됨] fileUploadInput/fileUploadButton 변수 선언이 파일 상단으로 이동됨
+// ⭐️ [수정됨] fileUploadButton 리스너가 initializeFirebase 함수 내부로 이동
+
 function createDownloadIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-blue-600"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>`; }
 window.downloadFile = function(fullPath) { getDownloadURL(ref(storage, fullPath)).then((url) => { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.click(); }).catch((error) => { console.error("Error getting download URL:", error); showToast("파일 다운로드 실패.", "error"); }); }
 window.deleteFile = function(docId, fullPath) { showConfirmationModal("정말로 이 파일을 삭제하시겠습니까?", async () => { const fileRef = ref(storage, fullPath); const docRef = doc(db, `artifacts/${appId}/users/${userId}/file_metadata/${docId}`); try { await deleteObject(fileRef); await deleteDoc(docRef); showToast("파일 삭제 성공.", "success"); } catch (error) { console.error("Error deleting file:", error); if (error.code === 'storage/object-not-found') { try { await deleteDoc(docRef); showToast("파일 정보 정리됨.", "info"); } catch (dbError) { console.error("Orphaned metadata delete error:", dbError); showToast("파일 삭제 실패.", "error"); } } else { showToast("파일 삭제 실패.", "error"); } } }); }
@@ -954,53 +1065,8 @@ window.craftSentences = async function(button, word) { const contextInput = butt
 
 // 11. Initializers and Event Listeners
 async function translateWordOnHover(word) {if (translationCache[word]) { return translationCache[word]; } try { const prompt = `Translate the English word "${word}" to Korean. Provide only the most common meaning.`; const translation = await callGemini(prompt); translationCache[word] = translation.trim(); return translationCache[word]; } catch (error) { console.error("Translation on hover failed:", error); return "번역 실패"; } }
-document.addEventListener('mouseover', async (e) => { 
-    // [MODIFIED] Check for userId (is unlocked)
-    if (e.target.classList.contains('clickable-word') && userId) { 
-        const word = e.target.textContent.trim().replace(/[^a-zA-Z-]/g, ''); 
-        if (!word) return; 
-        const translation = await translateWordOnHover(word); 
-        wordTooltip.textContent = translation; 
-        wordTooltip.classList.remove('hidden'); 
-        const rect = e.target.getBoundingClientRect(); 
-        wordTooltip.style.left = `${rect.left + window.scrollX + rect.width / 2 - wordTooltip.offsetWidth / 2}px`; 
-        wordTooltip.style.top = `${rect.top + window.scrollY - wordTooltip.offsetHeight - 5}px`; 
-    } 
-});
-document.addEventListener('mouseout', (e) => { if (e.target.classList.contains('clickable-word')) { wordTooltip.classList.add('hidden'); } });
 
-document.addEventListener('click', (e) => { 
-    // [MODIFIED] Check for userId (is unlocked)
-    if (e.target.classList.contains('clickable-word') && userId) { 
-        const word = e.target.textContent.trim().replace(/[^a-zA-Z-]/g, ''); 
-        if (word) { 
-            searchInput.value = word; 
-            checkAndLoadPage(word); // [MODIFIED] Check for saved page first
-            hideListModal(); 
-        } 
-    } 
-
-    const listItemTarget = e.target.closest('.searchable-list-item'); 
-    if (listItemTarget) { 
-        const word = listItemTarget.dataset.word; 
-        if(word) {
-            searchInput.value = word;
-            checkAndLoadPage(word); // Load or search
-            hideListModal(); // Close modal
-        }
-    }
-});
-
-// [MODIFIED] Check for userId before searching
-searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && userId) { handleSearch(searchInput.value.trim()); } });
-document.getElementById('word-list-btn').addEventListener('click', () => showListModal('words'));
-document.getElementById('sentence-list-btn').addEventListener('click', () => showListModal('sentences'));
-document.getElementById('file-storage-btn').addEventListener('click', showFileModal);
-document.getElementById('share-btn').addEventListener('click', () => { if(navigator.share) { navigator.share({ title: 'AI Vocabulary Builder', text: 'AI와 함께 새로운 단어를 배워보세요!', url: window.location.href }).catch(err => console.error("Share failed", err)); } else { try { navigator.clipboard.writeText(window.location.href); showToast("링크가 클립보드에 복사되었습니다.", "success"); } catch (err) { console.error("Clipboard write failed:", err); showToast("클립보드 복사 실패.", "error"); } } });
-sortOptions.addEventListener('change', (e) => { currentSort = e.target.value; renderList(); });
-markReadBtn.addEventListener('click', () => performBulkAction('mark-read'));
-markUnreadBtn.addEventListener('click', () => performBulkAction('mark-read')); // [FIXED] Should be mark-read
-deleteSelectedBtn.addEventListener('click', () => performBulkAction('delete'));
+// ⭐️ [수정됨] 모든 document/element.addEventListener가 initializeFirebase 함수 내부로 이동
 
 // App Initialization
 document.addEventListener('DOMContentLoaded', initializeFirebase);

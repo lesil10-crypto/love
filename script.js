@@ -206,22 +206,7 @@ async function initializeFirebase() {
         setLogLevel('debug'); // 'info' or 'debug' for more logs                                                                                                                                                                           // ⬆️⬆️⬆️ [여기까지 새로 추가] ⬆️⬆️⬆️
                  // [NEW] Handle Google Login Redirect Result
             // 사용자가 Google 로그인을 마치고 돌아왔는지 확인합니다.
-            try {
-                const result = await getRedirectResult(auth);
-                if (result && result.user) {
-                    // Google 로그인을 통해 성공적으로 돌아온 경우
-                    console.log("Google Sign-In via redirect successful:", result.user.displayName);
-                    showToast(`${result.user.displayName}님, 환영합니다!`, "success");
-                    // onAuthStateChanged가 이어서 처리할 것입니다.
-                }
-            } catch (error) {
-                // 사용자가 팝업을 닫은 경우(auth/popup-closed-by-user) 외의 오류 처리
-                if (error.code !== 'auth/popup-closed-by-user') {
-                    console.error("Google Sign-In Redirect Result Error:", error);
-                    showToast("Google 로그인 처리에 실패했습니다.", "error");
-                }
-            }
-
+          
      onAuthStateChanged(auth, (user) => {
             if (user) {
                 // User is signed in
@@ -377,11 +362,20 @@ async function initializeFirebase() {
 window.signInWithGoogle = async function() {
     const provider = new GoogleAuthProvider();
     try {
-        // 팝업 대신, 페이지 전체를 Google 로그인으로 이동시킵니다.
-        await signInWithRedirect(auth, provider);
+        // [수정] signInWithRedirect -> signInWithPopup
+        const result = await signInWithPopup(auth, provider);
+        
+        // 팝업은 onAuthStateChanged가 자동으로 감지하지만,
+        // 즉시 환영 인사를 띄워줄 수 있습니다.
+        console.log("Popup Sign-In successful:", result.user.displayName);
+        showToast(`${result.user.displayName}님, 환영합니다!`, "success");
+
     } catch (error) {
-        console.error("Google Sign-In Redirect Error:", error);
-        showToast("Google 로그인 페이지로 이동하는 데 실패했습니다.", "error");
+        console.error("Google Sign-In Popup Error:", error);
+        // 사용자가 팝업을 그냥 닫은 경우(auth/popup-closed-by-user)는 오류가 아닙니다.
+        if (error.code !== 'auth/popup-closed-by-user') {
+            showToast("Google 팝업 로그인에 실패했습니다.", "error");
+        }
     }
 }
 

@@ -1,38 +1,40 @@
-// 이 파일은 Vercel에서만 실행되는 '서버' 코드입니다.
-// 주소는 /api/callGemini 가 됩니다.
-
 export default async function handler(request, response) {
-  // 1. POST 방식의 요청만 받습니다.
-  if (request.method !== 'POST') {
-    return response.status(405).send('Method Not Allowed');
+  // 1. POST 요청이 아니거나 body가 없으면 차단
+  if (request.method !== 'POST' || !request.body) {
+    return response.status(400).json({ error: 'POST request and body are required.' });
   }
 
-  // 2. Vercel에 안전하게 숨겨둔 '환경 변수'에서 API 키를 가져옵니다.
-  // (코드에는 키가 전혀 들어가지 않습니다.)
-  const GEMINI_API_KEY = process.env.USER_GEMINI_API_KEY;
-
-  if (!GEMINI_API_KEY) {
-    return response.status(500).json({ error: '서버에 API 키가 설정되지 않았습니다.' });
+  // 2. Vercel 환경 변수에서 Google API 키를 가져옵니다.
+  const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+  if (!GOOGLE_API_KEY) {
+    return response.status(500).json({ error: 'API key is not configured.' });
   }
 
-  // 3. 사용자의 브라우저(script.js)가 보낸 요청 내용을 받습니다.
+  // 3. 프론트엔드에서 보낸 데이터를 꺼냅니다.
   const { googleApiUrl, payload } = request.body;
+  const fullGoogleApiUrl = `${googleApiUrl}?key=${GOOGLE_API_KEY}`;
 
   try {
-    // 4. 이 '서버'가 비밀 키를 사용해 *대신* Google에 요청을 보냅니다.
-    const apiResponse = await fetch(`${googleApiUrl}?key=${GEMINI_API_KEY}`, {
+    // 4. 이 백엔드 함수가 프론트엔드를 대신하여 "진짜" Google API를 호출합니다.
+    const googleResponse = await fetch(fullGoogleApiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
     });
 
-    const data = await apiResponse.json();
+    if (!googleResponse.ok) {
+      const errorText = await googleResponse.text();
+      // Google에서 받은 오류를 그대로 프론트엔드에 전달
+      return response.status(googleResponse.status).json({ error: 'Google API Error', details: errorText });
+    }
 
-    // 5. Google의 응답 결과를 다시 사용자의 브라우저로 돌려줍니다.
-    return response.status(apiResponse.status).json(data);
+    // 5. Google의 응답을 프론트엔드로 다시 전달합니다.
+    const data = await googleResponse.json();
+    return response.status(200).json(data);
 
   } catch (error) {
-    console.error("백엔드 에러:", error);
-    return response.status(500).json({ error: 'Internal server error' });
+    return response.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
 }

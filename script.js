@@ -25,7 +25,11 @@ let searchInput, searchButton, loadingContainer, loadingText, progressBar, searc
     modalImage, wordTooltip, fileModalContainer, fileUploadInput, fileUploadButton,
     listModalContainer, listModalTitle, listModalContent, sortOptions, markReadBtn,
     markUnreadBtn, deleteSelectedBtn, confirmCallback, confirmationModal,
-    confirmationMessage, confirmOkBtn, confirmCancelBtn;
+    confirmationMessage, confirmOkBtn, confirmCancelBtn,
+    // ⭐️ [요청 1 추가] 검색 선택 모달 변수
+    searchChoiceModal, searchChoiceWord, searchChoiceLoadSavedBtn, 
+    searchChoiceNewSearchBtn, searchChoiceCancelBtn,
+    currentChoicePageData; // To hold the data for the load button
 
 const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
 const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict`;
@@ -51,6 +55,33 @@ let savedSentences = [];
 // =========================================================================
 // === 모든 주요 함수들을 이곳에 먼저 정의합니다. ===
 // =========================================================================
+
+// ⭐️ [요청 1 추가] 검색 선택 모달 함수
+function showSearchChoiceModal(word, pageData) {
+    searchChoiceWord.textContent = word;
+    currentChoicePageData = pageData; // 나중에 '로드' 버튼 클릭 시 사용할 데이터 저장
+    searchChoiceModal.classList.remove('hidden');
+    searchChoiceModal.classList.add('flex');
+    safeCreateIcons(); // 모달 내 아이콘 렌더링
+}
+
+function hideSearchChoiceModal() {
+    searchChoiceModal.classList.add('hidden');
+    searchChoiceModal.classList.remove('flex');
+    currentChoicePageData = null;
+}
+
+async function loadSavedPageFromChoice() {
+    const word = searchChoiceWord.textContent;
+    showToast("저장된 페이지를 불러옵니다...", "info");
+    const tabId = addTab(word, true);
+    const currentTab = tabs[tabId];
+    currentTab.fullSearchResult = currentChoicePageData; // 저장된 데이터 사용
+    await renderSavedPage(currentTab, currentChoicePageData);
+    hideSearchChoiceModal();
+}
+// ⭐️ [여기까지 요청 1 추가]
+
 function renderFileList(files) {
     const fileListDiv = document.getElementById('file-list');
     if (files.length === 0) {
@@ -189,6 +220,14 @@ async function initializeFirebase() {
     confirmOkBtn = document.getElementById('confirm-ok-btn');
     confirmCancelBtn = document.getElementById('confirm-cancel-btn');
     confirmCallback = null;
+
+    // ⭐️ [요청 1 추가] 검색 선택 모달 변수 할당
+    searchChoiceModal = document.getElementById('search-choice-modal');
+    searchChoiceWord = document.getElementById('search-choice-word');
+    searchChoiceLoadSavedBtn = document.getElementById('search-choice-load-saved-btn');
+    searchChoiceNewSearchBtn = document.getElementById('search-choice-new-search-btn');
+    searchChoiceCancelBtn = document.getElementById('search-choice-cancel-btn');
+    currentChoicePageData = null;
     // ⭐️ [여기까지 수정]
 
     const firebaseConfig = USER_FIREBASE_CONFIG;
@@ -276,6 +315,15 @@ async function initializeFirebase() {
     confirmOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } hideConfirmationModal(); });
     confirmCancelBtn.addEventListener('click', hideConfirmationModal);
 
+    // ⭐️ [요청 1 추가] 검색 선택 모달 리스너
+    searchChoiceLoadSavedBtn.addEventListener('click', loadSavedPageFromChoice);
+    searchChoiceNewSearchBtn.addEventListener('click', () => {
+        const word = searchChoiceWord.textContent;
+        executeSearchForWord(word); // 새 검색 실행
+        hideSearchChoiceModal();
+    });
+    searchChoiceCancelBtn.addEventListener('click', hideSearchChoiceModal);
+
     fileUploadButton.addEventListener('click', () => { 
         if (!auth || !auth.currentUser) { showToast("Firebase에 연결되지 않았습니다.", "error"); return; } 
         const file = fileUploadInput.files[0]; 
@@ -325,11 +373,12 @@ async function initializeFirebase() {
     document.addEventListener('mouseout', (e) => { if (e.target.classList.contains('clickable-word')) { wordTooltip.classList.add('hidden'); } });
 
     document.addEventListener('click', (e) => { 
+        // ⭐️ [요청 1, 4] clickable-word 클릭 시 checkAndLoadPage 호출
         if (e.target.classList.contains('clickable-word') && userId) { 
             const word = e.target.textContent.trim().replace(/[^a-zA-Z-]/g, ''); 
             if (word) { 
                 searchInput.value = word; 
-                checkAndLoadPage(word); 
+                checkAndLoadPage(word); // 저장 여부 확인 함수 호출
                 hideListModal(); 
             } 
         } 
@@ -338,12 +387,13 @@ async function initializeFirebase() {
             const word = listItemTarget.dataset.word; 
             if(word) {
                 searchInput.value = word;
-                checkAndLoadPage(word); 
+                checkAndLoadPage(word); // 저장 여부 확인 함수 호출
                 hideListModal(); 
             }
         }
     });
 
+    // ⭐️ [요청 1] 검색 버튼 클릭 시 handleSearch -> checkAndLoadPage 호출
     searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && userId) { handleSearch(searchInput.value.trim()); } });
     document.getElementById('word-list-btn').addEventListener('click', () => showListModal('words'));
     document.getElementById('sentence-list-btn').addEventListener('click', () => showListModal('sentences'));
@@ -479,40 +529,43 @@ async function callImagenWithRetry(prompt, retries = 3) {
 // ---------------------------
 
 // [MODIFIED] Password check removed, directly calls handleSearch
+// ⭐️ [요청 1] checkSearchAccess가 handleSearch를 직접 호출합니다.
 window.checkSearchAccess = function() {
     handleSearch(searchInput.value.trim());
 }
 
+// ⭐️ [요청 1 수정]
 // [NEW] New function to decide loading strategy
+// 이 함수가 "게이트키퍼" 역할을 합니다.
 async function checkAndLoadPage(word) {
     if (!db || !userId) {
         showToast("DB 연결 오류", "error");
-        handleSearch(word); // Fallback to normal search
+        executeSearchForWord(word); // Fallback to normal search
         return;
     }
-    const pageRef = doc(db, `artifacts/${appId}/users/${userId}/saved_pages/${word}`);
+    // 단어를 소문자로 정규화하여 저장 및 검색
+    const normalizedWord = word.toLowerCase();
+    const pageRef = doc(db, `artifacts/${appId}/users/${userId}/saved_pages/${normalizedWord}`);
+    
     try {
         const docSnap = await getDoc(pageRef);
         if (docSnap.exists()) {
-            // Saved page found!
-            showToast("저장된 페이지를 불러옵니다...", "info");
+            // ⭐️ [요청 1] 저장된 페이지 발견! 사용자에게 물어봅니다.
             const pageData = docSnap.data().pageData;
-            const tabId = addTab(word, true);
-            const currentTab = tabs[tabId];
-            currentTab.fullSearchResult = pageData; // Store loaded data
-            await renderSavedPage(currentTab, pageData);
+            showSearchChoiceModal(word, pageData);
         } else {
             // Not found, do a new search
-            handleSearch(word);
+            executeSearchForWord(word);
         }
     } catch (error) {
         console.error("Error checking for saved page:", error);
         showToast("저장된 페이지 확인 중 오류 발생. 새 검색을 시작합니다.", "error");
-        handleSearch(word);
+        executeSearchForWord(word); // 에러 발생 시 새 검색으로 대체
     }
 }
 
 
+// ⭐️ [요청 1, 2] 수정
 async function handleSearch(query) {
     // [REMOVED] if (!isSearchUnlocked) return;
     // [MODIFIED] Check for userId instead of auth.currentUser
@@ -525,16 +578,33 @@ async function handleSearch(query) {
         try {
             const ambiguityPrompt = `한국어 단어 "${query}"가 여러 개의 뚜렷하게 다른 영어 단어로 번역될 수 있나요? (예: '배' -> ship, pear, stomach). 다음 JSON 형식으로만 대답해줘: {"is_ambiguous": boolean, "english_words": ["단어1", "단어2", ...]}. 모호하지 않으면 "english_words" 배열에 대표 영어 단어 하나만 포함해줘.`;
             const ambiguityData = await callGemini(ambiguityPrompt, true);
-            if (ambiguityData.is_ambiguous && ambiguityData.english_words.length > 1) {
-                showToast(`'${query}'에 대해 여러 의미를 찾았습니다. 각각 탭으로 표시합니다.`, "info");
-                for (let i = 0; i < ambiguityData.english_words.length; i++) {
-                    const word = ambiguityData.english_words[i];
-                    await executeSearchForWord(word, i === 0);
+            
+            // ⭐️ [요청 2] Set을 사용해 중복된 영어 단어 제거
+            const uniqueEnglishWords = [...new Set(ambiguityData.english_words.filter(word => word))]; // null/undefined/빈 문자열 제거
+            
+            if (ambiguityData.is_ambiguous && uniqueEnglishWords.length > 1) {
+                showToast(`'${query}'에 대해 ${uniqueEnglishWords.length}개의 의미를 찾았습니다. 각각 탭으로 표시합니다.`, "info");
+                for (let i = 0; i < uniqueEnglishWords.length; i++) {
+                    const word = uniqueEnglishWords[i];
+                    // ⭐️ [요청 1] executeSearchForWord 대신 checkAndLoadPage 호출
+                    await checkAndLoadPage(word);
                 }
-            } else { await executeSearchForWord(ambiguityData.english_words[0] || query); }
-        } catch (error) { console.error("Ambiguity check failed:", error); showToast("단어 의미 확인 중 오류가 발생했습니다.", "error"); await executeSearchForWord(query); }
+            } else { 
+                const wordToSearch = uniqueEnglishWords[0] || query;
+                // ⭐️ [요청 1] executeSearchForWord 대신 checkAndLoadPage 호출
+                await checkAndLoadPage(wordToSearch); 
+            }
+        } catch (error) { 
+            console.error("Ambiguity check failed:", error); 
+            showToast("단어 의미 확인 중 오류가 발생했습니다.", "error"); 
+            // ⭐️ [요청 1] executeSearchForWord 대신 checkAndLoadPage 호출
+            await checkAndLoadPage(query); // Fallback
+        }
         finally { hideLoader(); }
-    } else { await executeSearchForWord(query); }
+    } else { 
+        // ⭐️ [요청 1] executeSearchForWord 대신 checkAndLoadPage 호출
+        await checkAndLoadPage(query); 
+    }
 }
 
 async function executeSearchForWord(wordQuery, makeActive = true) {
@@ -551,8 +621,12 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
     window.scrollTo({ top: headerHeight, behavior: 'smooth' });
     try {
         updateLoader(10, "기본 정보 생성 중...");
-        const initialInfoPrompt = `영어 단어 "${wordQuery}"에 대한 종합적인 정보를 생성해줘. 다음 JSON 형식을 반드시 따라줘:\n{\n  "word": "실제 영어 단어",\n  "koreanMeaning": "대표적인 한글 뜻",\n  "pronunciation": "발음 기호",\n  "mainImagePrompt": "단어를 함축적으로 표현하는, 예술적이고 상세한 이미지 생성을 위한 영어 프롬프트. 예: 'brain' -> 'A hyper-realistic, detailed anatomical illustration of the human brain, showing different lobes with glowing neural pathways, artistic style.'",\n  "episode": {\n    "story": "단어를 쉽게 기억할 수 있는 매우 웃기고 재미있는 짧은 이야기 (3~4 문장).",\n    "story_ko": "위 이야기의 자연스러운 한글 번역.",\n    "imagePrompt": "이야기 내용에 맞는, 밝고 유머러스한 만화 스타일의 이미지 생성을 위한 영어 프롬프트. 예: 'Dr. Slump' 만화 스타일."\n  }\n}`;
+        const initialInfoPrompt = `영어 단어 "${wordQuery}"에 대한 종합적인 정보를 생성해줘. 다음 JSON 형식을 반드시 따라줘:\n{\n  "word": "실제 영어 단어 (소문자로)",\n  "koreanMeaning": "대표적인 한글 뜻",\n  "pronunciation": "발음 기호",\n  "mainImagePrompt": "단어를 함축적으로 표현하는, 예술적이고 상세한 이미지 생성을 위한 영어 프롬프트. 예: 'brain' -> 'A hyper-realistic, detailed anatomical illustration of the human brain, showing different lobes with glowing neural pathways, artistic style.'",\n  "episode": {\n    "story": "단어를 쉽게 기억할 수 있는 매우 웃기고 재미있는 짧은 이야기 (3~4 문장).",\n    "story_ko": "위 이야기의 자연스러운 한글 번역.",\n    "imagePrompt": "이야기 내용에 맞는, 밝고 유머러스한 만화 스타일의 이미지 생성을 위한 영어 프롬프트. 예: 'Dr. Slump' 만화 스타일."\n  }\n}`;
         const initialData = await callGemini(initialInfoPrompt, true);
+        
+        // ⭐️ [요청 1] AI가 생성한 단어(소문자)로 통일
+        initialData.word = initialData.word.toLowerCase();
+        
         currentTab.fullSearchResult.initialData = initialData;
         if (searchId !== currentTab.searchId) return;
         updateLoader(25, "기본 정보 표시 중...");
@@ -917,8 +991,9 @@ window.saveCurrentPage = async function(tabId) {
     saveButton.innerHTML = `<div class="loader w-5 h-5 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>0%...`;
 
     try {
-        const word = tab.fullSearchResult.initialData.word;
-        // [MODIFIED] Check userId
+        // ⭐️ [요청 1] 단어를 소문자로 정규화하여 저장
+        const word = tab.fullSearchResult.initialData.word.toLowerCase();
+        
         if (!userId) {
             showToast("로그인이 필요합니다.", "error");
             saveButton.disabled = false;
@@ -974,6 +1049,7 @@ window.saveCurrentPage = async function(tabId) {
 
         // All images uploaded, now save to Firestore
         saveButton.innerHTML = `<div class="loader w-5 h-5 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>Firestore 저장 중...`;
+        // ⭐️ [요청 1] 정규화된 word(소문자)를 문서 ID로 사용
         const pageRef = doc(db, `artifacts/${appId}/users/${userId}/saved_pages/${word}`);
         await setDoc(pageRef, {
             word: word,
@@ -993,17 +1069,19 @@ window.saveCurrentPage = async function(tabId) {
 
 // [NEW] Delete saved page
 window.deleteSavedPage = async function(word) {
-    showConfirmationModal(`'${word}'의 저장된 페이지를 정말로 삭제하시겠습니까? (저장된 이미지 파일은 삭제되지 않습니다)`, async () => {
+    // ⭐️ [요청 1] 삭제 시에도 소문자로 정규화
+    const normalizedWord = word.toLowerCase();
+    showConfirmationModal(`'${normalizedWord}'의 저장된 페이지를 정말로 삭제하시겠습니까? (저장된 이미지 파일은 삭제되지 않습니다)`, async () => {
         if (!db || !userId) {
             showToast("DB 연결 오류", "error");
             return;
         }
-        const pageRef = doc(db, `artifacts/${appId}/users/${userId}/saved_pages/${word}`);
+        const pageRef = doc(db, `artifacts/${appId}/users/${userId}/saved_pages/${normalizedWord}`);
         try {
             await deleteDoc(pageRef);
             showToast("저장된 페이지를 삭제했습니다.", "success");
             
-            const deleteButton = document.getElementById(`delete-page-btn-${word}`);
+            const deleteButton = document.getElementById(`delete-page-btn-${normalizedWord}`);
             if(deleteButton) {
                 // Replace delete button with a "Save" button again
                 const tabId = deleteButton.closest('[id^="tab-content-"]').id.replace('tab-content-', 'tab-');
@@ -1023,14 +1101,26 @@ window.deleteSavedPage = async function(word) {
     });
 }
 
-async function addWordToHistory(word, meaning) { if (!db || !userId) return; const wordRef = doc(db, `artifacts/${appId}/users/${userId}/saved_words/${word}`); try { await setDoc(wordRef, { word, meaning, timestamp: new Date(), read: false }, { merge: true }); } catch(e){ console.error("Error adding word to history: ", e); } }
+// ⭐️ [요청 1] 저장 시 소문자로 저장
+async function addWordToHistory(word, meaning) { 
+    if (!db || !userId) return; 
+    const normalizedWord = word.toLowerCase();
+    const wordRef = doc(db, `artifacts/${appId}/users/${userId}/saved_words/${normalizedWord}`); 
+    try { 
+        await setDoc(wordRef, { word: normalizedWord, meaning, timestamp: new Date(), read: false }, { merge: true }); 
+    } catch(e){ console.error("Error adding word to history: ", e); } 
+}
 window.saveSentence = async function(en, ko) { if (!db || !userId) { showToast("데이터베이스에 연결되지 않았습니다.", "error"); return; } try { const sentenceRef = collection(db, `artifacts/${appId}/users/${userId}/saved_sentences`); await addDoc(sentenceRef, { en, ko, timestamp: new Date(), read: false }); showToast("예문이 저장되었습니다.", "success"); } catch (e) { console.error("Error saving sentence: ", e); showToast("예문 저장에 실패했습니다.", "error"); } }
 
-// 7. Saved List Modal UI (No changes needed)
+// 7. Saved List Modal UI
 // ⭐️ [수정됨] listModal... 변수 선언이 파일 상단으로 이동됨
 let currentListType = ''; let currentSort = 'newest';
 function showListModal(type) { currentListType = type; listModalContainer.classList.remove('hidden'); listModalContainer.classList.add('flex'); if (type === 'words') { listModalTitle.textContent = '단어 목록 (검색 기록)'; sortOptions.innerHTML = `<option value="newest">최신순</option><option value="alphabetical">알파벳순</option>`; } else { listModalTitle.textContent = '저장된 예문 목록'; sortOptions.innerHTML = `<option value="newest">최신순</option><option value="length">길이순</option>`; } sortOptions.value = currentSort; renderList(); updateListActionButtonsState(); }
-function renderList() { let items = currentListType === 'words' ? [...savedWords] : [...savedSentences]; items.sort((a, b) => { if (!a.timestamp || !b.timestamp) return 0; const timeA = a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime(); const timeB = b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime(); return timeB - timeA; }); if (currentSort === 'alphabetical' && currentListType === 'words') { items.sort((a, b) => a.word.localeCompare(b.word)); } else if (currentSort === 'length' && currentListType === 'sentences') { items.sort((a, b) => a.en.length - b.en.length); } if (items.length === 0) { listModalContent.innerHTML = `<p class="text-center text-gray-500">저장된 항목이 없습니다.</p>`; return; } listModalContent.innerHTML = items.map(item => { const readClass = item.read ? 'opacity-50' : ''; const baseHtml = `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-200 ${readClass}" data-id="${item.id}"><div class="flex items-center flex-grow min-w-0"><input type="checkbox" class="mr-4 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 item-checkbox" data-id="${item.id}"><div class="flex-grow min-w-0">`; 
+function renderList() { let items = currentListType === 'words' ? [...savedWords] : [...savedSentences]; items.sort((a, b) => { if (!a.timestamp || !b.timestamp) return 0; const timeA = a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime(); const timeB = b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime(); return timeB - timeA; }); if (currentSort === 'alphabetical' && currentListType === 'words') { items.sort((a, b) => a.word.localeCompare(b.word)); } else if (currentSort === 'length' && currentListType === 'sentences') { items.sort((a, b) => a.en.length - b.en.length); } if (items.length === 0) { listModalContent.innerHTML = `<p class="text-center text-gray-500">저장된 항목이 없습니다.</p>`; return; } 
+// ⭐️ [요청 3 수정] min-w-0 클래스 제거 (flex-grow만 남김)
+const baseHtml = `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-200 ${readClass}" data-id="${item.id}"><div class="flex items-center flex-grow"><input type="checkbox" class="mr-4 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 item-checkbox" data-id="${item.id}"><div class="flex-grow">`; 
+// ⭐️ [수정 끝]
+listModalContent.innerHTML = items.map(item => { const readClass = item.read ? 'opacity-50' : ''; 
 // ⭐️ [수정 시작] 님의 요청대로 '단어 목록' UI를 수정합니다.
 if (currentListType === 'words') { 
     return baseHtml + `<p class="font-bold text-lg" data-word="${item.word}">${item.word}</p><p class="truncate">${item.meaning}</p></div></div>
@@ -1041,8 +1131,9 @@ if (currentListType === 'words') {
             <button onclick="deleteListItem('${item.id}', 'words')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button>
         </div></div>`; 
 } else { 
+// ⭐️ [요청 3, 4 수정] 예문 목록의 truncate 클래스 제거 및 addClickToSearch 적용
+    return baseHtml + `<div><p class="font-semibold">${addClickToSearch(item.en)}</p><p class="text-sm">${item.ko}</p></div></div></div><div class="flex items-center gap-1 flex-shrink-0"><button class="icon-btn" onclick="speak('${item.en.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button><button onclick="toggleReadStatus('${item.id}', 'sentences')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()}<span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button><button onclick="deleteListItem('${item.id}', 'sentences')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button></div></div>`; } }).join('<hr class="my-1 border-slate-300">'); safeCreateIcons(); } window.renderList = renderList;
 // ⭐️ [수정 끝]
-    return baseHtml + `<div class="truncate"><p class="font-semibold truncate">${addClickToSearch(item.en)}</p><p class="text-sm truncate">${item.ko}</p></div></div></div><div class="flex items-center gap-1 flex-shrink-0"><button class="icon-btn" onclick="speak('${item.en.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button><button onclick="toggleReadStatus('${item.id}', 'sentences')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()}<span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button><button onclick="deleteListItem('${item.id}', 'sentences')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button></div></div>`; } }).join('<hr class="my-1 border-slate-300">'); safeCreateIcons(); } window.renderList = renderList;
 function createEyeIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-gray-500"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; } function createEyeOffIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-gray-500"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path><path d="M6.61 6.61A13.16 13.16 0 0 0 2 12s3 7 10 7a9.92 9.92 0 0 0 5.43-1.61"></path><line x1="2" x2="22" y1="2" y2="22"></line></svg>`; } function createTrashIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-red-500"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M15 6V4c0-1-1-2-2-2h-2c-1 0-2 1-2 2v2"></path></svg>`; }
 // ⭐️ [추가] 님의 요청대로 새 아이콘 함수 2개를 추가합니다.
 function createLoadIcon(size = 'w-5 h-5') { 
@@ -1052,25 +1143,61 @@ function createSearchIcon(size = 'w-5 h-5') {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-green-600"><circle cx="11" cy="11" r="8"></circle><line x1="21" x2="16.65" y1="21" y2="16.65"></line></svg>`; 
 }
 // ⭐️ [추가] 님의 요청대로 새 아이콘 버튼을 위한 함수를 추가합니다.
+// ⭐️ [요청 1] loadWordFromList 함수 수정
 window.loadWordFromList = function(word, fromSaved) {
     searchInput.value = word;
     if (fromSaved) {
         // "저장된 페이지 로드" 클릭 시:
-        // 저장된 페이지를 찾고, 없으면 새 검색을 실행합니다.
+        // ⭐️ [요청 1] 저장된 페이지를 찾고, 없으면 새 검색을 실행합니다.
         checkAndLoadPage(word); 
     } else {
         // "새로 검색" 클릭 시:
-        // 즉시 새로운 AI 검색을 실행합니다.
-        handleSearch(word);
+        // ⭐️ [요청 1] 즉시 새로운 AI 검색을 실행합니다. (저장 여부 묻지 않음)
+        executeSearchForWord(word);
     }
     hideListModal(); // 모달 닫기
 }
 
-window.deleteListItem = function(id, type) { showConfirmationModal("정말로 이 항목을 삭제하시겠습니까?", async () => { if (!db || !userId) return; const collectionName = type === 'words' ? 'saved_words' : 'saved_sentences'; const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${id}`); try { await deleteDoc(docRef); showToast("삭제되었습니다.", "success"); } catch (error) { console.error("Error deleting item:", error); showToast("삭제에 실패했습니다.", "error"); } }); }
-window.toggleReadStatus = async function(id, type) { if (!db || !userId) return; const collectionName = type === 'words' ? 'saved_words' : 'saved_sentences'; const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${id}`); try { const docSnap = await getDoc(docRef); if (docSnap.exists()) { const currentStatus = docSnap.data().read; await updateDoc(docRef, { read: !currentStatus }); } } catch (error) { console.error("Error toggling read status:", error); showToast("상태 변경에 실패했습니다.", "error"); } };
+window.deleteListItem = function(id, type) { 
+    // ⭐️ [요청 1] 단어 삭제 시 ID(소문자) 사용
+    const normalizedId = type === 'words' ? id.toLowerCase() : id;
+    showConfirmationModal("정말로 이 항목을 삭제하시겠습니까?", async () => { 
+        if (!db || !userId) return; 
+        const collectionName = type === 'words' ? 'saved_words' : 'saved_sentences'; 
+        const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${normalizedId}`); 
+        try { 
+            await deleteDoc(docRef); 
+            showToast("삭제되었습니다.", "success"); 
+        } catch (error) { 
+            console.error("Error deleting item:", error); 
+            showToast("삭제에 실패했습니다.", "error"); 
+        } 
+    }); 
+}
+window.toggleReadStatus = async function(id, type) { 
+    if (!db || !userId) return; 
+    // ⭐️ [요청 1] 단어 상태 변경 시 ID(소문자) 사용
+    const normalizedId = type === 'words' ? id.toLowerCase() : id;
+    const collectionName = type === 'words' ? 'saved_words' : 'saved_sentences'; 
+    const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${normalizedId}`); 
+    try { 
+        const docSnap = await getDoc(docRef); 
+        if (docSnap.exists()) { 
+            const currentStatus = docSnap.data().read; 
+            await updateDoc(docRef, { read: !currentStatus }); 
+        } 
+    } catch (error) { 
+        console.error("Error toggling read status:", error); 
+        showToast("상태 변경에 실패했습니다.", "error"); 
+    } 
+};
 function updateListActionButtonsState() { const checkedItems = listModalContent.querySelectorAll('.item-checkbox:checked'); const hasSelection = checkedItems.length > 0; markReadBtn.disabled = !hasSelection; markUnreadBtn.disabled = !hasSelection; deleteSelectedBtn.disabled = !hasSelection; }
 // ⭐️ [수정됨] listModalContent 리스너가 initializeFirebase 함수 내부로 이동
-async function performBulkAction(action) { const checkedItems = listModalContent.querySelectorAll('.item-checkbox:checked'); if (checkedItems.length === 0) { showToast("항목을 선택해주세요.", "warning"); return; } const actionText = action === 'delete' ? '삭제' : '상태 변경'; showConfirmationModal(`선택한 ${checkedItems.length}개 항목을 정말로 ${actionText}하시겠습니까?`, async () => { if (!db || !userId) return; const batch = writeBatch(db); const collectionName = currentListType === 'words' ? 'saved_words' : 'saved_sentences'; checkedItems.forEach(item => { const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${item.dataset.id}`); if (action === 'delete') { batch.delete(docRef); } else { batch.update(docRef, { read: action === 'mark-read' }); } }); try { await batch.commit(); showToast("선택한 항목들이 처리되었습니다.", "success"); } catch (error) { console.error("Bulk action failed:", error); showToast("작업에 실패했습니다.", "error"); } }); }
+async function performBulkAction(action) { const checkedItems = listModalContent.querySelectorAll('.item-checkbox:checked'); if (checkedItems.length === 0) { showToast("항목을 선택해주세요.", "warning"); return; } const actionText = action === 'delete' ? '삭제' : '상태 변경'; showConfirmationModal(`선택한 ${checkedItems.length}개 항목을 정말로 ${actionText}하시겠습니까?`, async () => { if (!db || !userId) return; const batch = writeBatch(db); const collectionName = currentListType === 'words' ? 'saved_words' : 'saved_sentences'; checkedItems.forEach(item => { 
+    // ⭐️ [요청 1] 단어 대량 작업 시 ID(소문자) 사용
+    const normalizedId = currentListType === 'words' ? item.dataset.id.toLowerCase() : item.dataset.id;
+    const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${normalizedId}`); 
+    if (action === 'delete') { batch.delete(docRef); } else { batch.update(docRef, { read: action === 'mark-read' }); } }); try { await batch.commit(); showToast("선택한 항목들이 처리되었습니다.", "success"); } catch (error) { console.error("Bulk action failed:", error); showToast("작업에 실패했습니다.", "error"); } }); }
 window.hideListModal = function(event) { if(event) { if (event.currentTarget !== event.target && !event.target.closest('button')) return; } listModalContainer.classList.add('hidden'); listModalContainer.classList.remove('flex'); }
 
 // 8. Tab & Print Management (No changes needed)

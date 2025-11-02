@@ -202,7 +202,7 @@ async function initializeFirebase() {
         app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
-        storage = getStorage(app);
+        storage = getStorage(app,"gs://projec-48c55.firebasestorage.app");
         setLogLevel('debug'); // 'info' or 'debug' for more logs                                                                                                                                                                           // ⬆️⬆️⬆️ [여기까지 새로 추가] ⬆️⬆️⬆️
                  // [NEW] Handle Google Login Redirect Result
             // 사용자가 Google 로그인을 마치고 돌아왔는지 확인합니다.

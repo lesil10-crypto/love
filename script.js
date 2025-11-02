@@ -9,7 +9,7 @@ import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, up
 // Github Pages에서는 Firebase App Check와 Firestore 보안 규칙으로 데이터를 보호해야 합니다.
 const USER_FIREBASE_CONFIG = {
  apiKey: "AIzaSyDKmpQO6htm7jZ2DByUfGnmocZP7dpTJhs",
- authDomain: "love-eta-gray.vercel.app",
+ authDomain: "projec-48c55.firebaseapp.com",
  projectId: "projec-48c55",
  storageBucket: "projec-48c55.appspot.com",
  messagingSenderId: "376464552007",

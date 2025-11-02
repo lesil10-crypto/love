@@ -1116,24 +1116,55 @@ window.saveSentence = async function(en, ko) { if (!db || !userId) { showToast("
 // ⭐️ [수정됨] listModal... 변수 선언이 파일 상단으로 이동됨
 let currentListType = ''; let currentSort = 'newest';
 function showListModal(type) { currentListType = type; listModalContainer.classList.remove('hidden'); listModalContainer.classList.add('flex'); if (type === 'words') { listModalTitle.textContent = '단어 목록 (검색 기록)'; sortOptions.innerHTML = `<option value="newest">최신순</option><option value="alphabetical">알파벳순</option>`; } else { listModalTitle.textContent = '저장된 예문 목록'; sortOptions.innerHTML = `<option value="newest">최신순</option><option value="length">길이순</option>`; } sortOptions.value = currentSort; renderList(); updateListActionButtonsState(); }
-function renderList() { let items = currentListType === 'words' ? [...savedWords] : [...savedSentences]; items.sort((a, b) => { if (!a.timestamp || !b.timestamp) return 0; const timeA = a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime(); const timeB = b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime(); return timeB - timeA; }); if (currentSort === 'alphabetical' && currentListType === 'words') { items.sort((a, b) => a.word.localeCompare(b.word)); } else if (currentSort === 'length' && currentListType === 'sentences') { items.sort((a, b) => a.en.length - b.en.length); } if (items.length === 0) { listModalContent.innerHTML = `<p class="text-center text-gray-500">저장된 항목이 없습니다.</p>`; return; } 
-// ⭐️ [요청 3 수정] min-w-0 클래스 제거 (flex-grow만 남김)
-const baseHtml = `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-200 ${readClass}" data-id="${item.id}"><div class="flex items-center flex-grow"><input type="checkbox" class="mr-4 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 item-checkbox" data-id="${item.id}"><div class="flex-grow">`; 
-// ⭐️ [수정 끝]
-listModalContent.innerHTML = items.map(item => { const readClass = item.read ? 'opacity-50' : ''; 
-// ⭐️ [수정 시작] 님의 요청대로 '단어 목록' UI를 수정합니다.
-if (currentListType === 'words') { 
-    return baseHtml + `<p class="font-bold text-lg" data-word="${item.word}">${item.word}</p><p class="truncate">${item.meaning}</p></div></div>
-        <div class="flex items-center gap-1 flex-shrink-0">
-            <button onclick="loadWordFromList('${item.word.replace(/'/g, "\\'")}', true)" class="icon-btn">${createLoadIcon()}<span class="tooltip">저장된 페이지 로드</span></button>
-            <button onclick="loadWordFromList('${item.word.replace(/'/g, "\\'")}', false)" class="icon-btn">${createSearchIcon()}<span class="tooltip">새로 검색</span></button>
-            <button onclick="toggleReadStatus('${item.id}', 'words')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()} <span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button>
-            <button onclick="deleteListItem('${item.id}', 'words')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button>
-        </div></div>`; 
-} else { 
-// ⭐️ [요청 3, 4 수정] 예문 목록의 truncate 클래스 제거 및 addClickToSearch 적용
-    return baseHtml + `<div><p class="font-semibold">${addClickToSearch(item.en)}</p><p class="text-sm">${item.ko}</p></div></div></div><div class="flex items-center gap-1 flex-shrink-0"><button class="icon-btn" onclick="speak('${item.en.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button><button onclick="toggleReadStatus('${item.id}', 'sentences')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()}<span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button><button onclick="deleteListItem('${item.id}', 'sentences')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button></div></div>`; } }).join('<hr class="my-1 border-slate-300">'); safeCreateIcons(); } window.renderList = renderList;
-// ⭐️ [수정 끝]
+
+// ⭐️⭐️⭐️ [버그 수정] renderList 함수를 수정합니다. ⭐️⭐️⭐️
+function renderList() { 
+    let items = currentListType === 'words' ? [...savedWords] : [...savedSentences]; 
+    items.sort((a, b) => { 
+        if (!a.timestamp || !b.timestamp) return 0; 
+        const timeA = a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp).getTime(); 
+        const timeB = b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp).getTime(); 
+        return timeB - timeA; 
+    }); 
+    
+    if (currentSort === 'alphabetical' && currentListType === 'words') { 
+        items.sort((a, b) => a.word.localeCompare(b.word)); 
+    } else if (currentSort === 'length' && currentListType === 'sentences') { 
+        items.sort((a, b) => a.en.length - b.en.length); 
+    } 
+    
+    if (items.length === 0) { 
+        listModalContent.innerHTML = `<p class="text-center text-gray-500">저장된 항목이 없습니다.</p>`; 
+        return; 
+    } 
+    
+    listModalContent.innerHTML = items.map(item => { 
+        const readClass = item.read ? 'opacity-50' : ''; 
+        
+        // ⭐️ [버그 수정] baseHtml 정의를 map 콜백 내부로 이동시켰습니다.
+        // ⭐️ [요청 3] min-w-0 클래스가 제거된 버전입니다.
+        const baseHtml = `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-200 ${readClass}" data-id="${item.id}"><div class="flex items-center flex-grow"><input type="checkbox" class="mr-4 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 item-checkbox" data-id="${item.id}"><div class="flex-grow">`; 
+        
+        if (currentListType === 'words') { 
+            return baseHtml + `<p class="font-bold text-lg" data-word="${item.word}">${item.word}</p><p class="truncate">${item.meaning}</p></div></div>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <button onclick="loadWordFromList('${item.word.replace(/'/g, "\\'")}', true)" class="icon-btn">${createLoadIcon()}<span class="tooltip">저장된 페이지 로드</span></button>
+                    <button onclick="loadWordFromList('${item.word.replace(/'/g, "\\'")}', false)" class="icon-btn">${createSearchIcon()}<span class="tooltip">새로 검색</span></button>
+                    <button onclick="toggleReadStatus('${item.id}', 'words')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()} <span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button>
+                    <button onclick="deleteListItem('${item.id}', 'words')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button>
+                </div></div>`; 
+        } else { 
+            // ⭐️ [요청 3, 4] 예문 목록의 truncate 클래스 제거 및 addClickToSearch 적용
+            return baseHtml + `<div><p class="font-semibold">${addClickToSearch(item.en)}</p><p class="text-sm">${item.ko}</p></div></div></div><div class="flex items-center gap-1 flex-shrink-0"><button class="icon-btn" onclick="speak('${item.en.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button><button onclick="toggleReadStatus('${item.id}', 'sentences')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()}<span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button><button onclick="deleteListItem('${item.id}', 'sentences')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button></div></div>`; 
+        } 
+    }).join('<hr class="my-1 border-slate-300">'); 
+    
+    safeCreateIcons(); 
+} 
+window.renderList = renderList;
+// ⭐️⭐️⭐️ [여기까지 수정] ⭐️⭐️⭐️
+
+
 function createEyeIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-gray-500"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; } function createEyeOffIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-gray-500"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path><path d="M6.61 6.61A13.16 13.16 0 0 0 2 12s3 7 10 7a9.92 9.92 0 0 0 5.43-1.61"></path><line x1="2" x2="22" y1="2" y2="22"></line></svg>`; } function createTrashIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-red-500"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M15 6V4c0-1-1-2-2-2h-2c-1 0-2 1-2 2v2"></path></svg>`; }
 // ⭐️ [추가] 님의 요청대로 새 아이콘 함수 2개를 추가합니다.
 function createLoadIcon(size = 'w-5 h-5') { 

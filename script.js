@@ -11,7 +11,7 @@ const USER_FIREBASE_CONFIG = {
  apiKey: "AIzaSyDKmpQO6htm7jZ2DByUfGnmocZP7dpTJhs",
  authDomain: "love-eta-gray.vercel.app",
  projectId: "projec-48c55",
- storageBucket: "projec-48c55.firebasestorage.app",
+ storageBucket: "projec-48c55.appspot.com",
  messagingSenderId: "376464552007",
  appId: "1:376464552007:web:929b53196fc86af19dc162",
  measurementId: "G-HMKJMNFGM4"

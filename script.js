@@ -921,49 +921,82 @@ window.startPronunciationCheck = function(word) { const feedbackDiv = document.g
 // ---------------------------
 // 5. Modal and Tooltip Functions
 // ---------------------------
-// ⭐️ [수정됨] 변수 선언이 파일 상단으로 이동됨
 
 // [REMOVED] All password modal variables and functions (showPasswordModalIfNeeded, showPasswordModal, hidePasswordModal, handlePasswordSubmit)
 
-// [MODIFIED] Handles both base64 and remote URLs
+// ⭐️⭐️⭐️ [코드 통합] ⭐️⭐️⭐️
+// 아래 `window.showImageAnalysisModal` 함수를 CORS 문제 해결 및 분석 결과 저장이
+// 모두 포함된 최종 버전으로 교체했습니다.
+
 window.showImageAnalysisModal = async function(src, word, meaning) { 
     modalContent.innerHTML = `<div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold">이미지 분석: ${word}</h3><button onclick="hideModal()" class="text-gray-500 hover:text-gray-800"><i data-lucide="x"></i></button></div><img src="${src}" alt="${word}" class="rounded-lg shadow-md w-full h-auto object-cover mb-6"><div id="image-analysis-result" class="p-4 bg-slate-200 rounded-lg"><p class="font-semibold text-gray-700 flex items-center"><div class="loader w-4 h-4 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>AI가 이미지를 분석 중입니다...</p></div>`; 
     modalContainer.classList.remove('hidden'); 
     modalContainer.classList.add('flex'); 
     safeCreateIcons(); 
     
+    // ⭐️ [수정] 현재 탭을 찾아서, 이미 저장된 분석 결과가 있는지 확인합니다.
+    const activeTab = tabs[activeTabId];
+    const savedAnalysisText = activeTab?.fullSearchResult?.mainImageAnalysisText;
+
+    if (savedAnalysisText) {
+        // ⭐️ [수정] 저장된 분석 결과가 있으면, API 호출 없이 바로 표시합니다.
+        document.getElementById('image-analysis-result').innerHTML = `<strong class="text-blue-700">AI 분석 (저장됨):</strong> ${savedAnalysisText}`;
+        return; // 여기서 함수 종료
+    }
+
+    // ⭐️ [수정] 저장된 분석이 없을 때만 (처음 클릭 시) 새로 분석을 실행합니다.
     let base64Image = null;
     try {
         if (src.startsWith('data:image')) {
+            // [새 검색] - 'data:' URL이므로 base64를 바로 추출합니다.
             base64Image = src.split(',')[1];
         } else {
-            // It's a URL, fetch it and convert
-            const response = await fetch(src);
-            if (!response.ok) throw new Error("Failed to fetch image for analysis");
-            const blob = await response.blob();
-            base64Image = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
+            // [저장된 페이지] - 'http...' URL이므로 Vercel 프록시를 호출합니다.
+            // ⚠️ 중요: 이 기능은 Vercel의 /api/fetchImage.js 파일이 필요합니다.
+            const proxyResponse = await fetch('/api/fetchImage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageUrl: src })
             });
+            
+            if (!proxyResponse.ok) {
+                const errorData = await proxyResponse.json();
+                throw new Error(`Proxy failed: ${errorData.error || 'Unknown error'}`);
+            }
+            
+            const imageData = await proxyResponse.json();
+            base64Image = imageData.base64;
         }
         
         if (base64Image) {
+            // Base64 데이터를 성공적으로 확보했으면 Gemini에 분석 요청
             const prompt = `Analyze this image which was generated to represent the word "${word}" (meaning: ${meaning}). Describe how the visual elements in the image conceptually represent the word. Respond in Korean.`;
+            
             callGemini(prompt, false, base64Image).then(analysis => { 
-                document.getElementById('image-analysis-result').innerHTML = `<strong class="text-blue-700">AI 분석:</strong> ${analysis}`; 
+                document.getElementById('image-analysis-result').innerHTML = `<strong class="text-blue-700">AI 분석:</strong> ${analysis}`;
+                
+                // ⭐️ [수정] 분석 결과를 현재 탭의 데이터에 저장합니다.
+                // (이후 "페이지 저장" 버튼을 누르면 이 내용이 Firestore에 함께 저장됩니다.)
+                if (activeTab?.fullSearchResult) {
+                    activeTab.fullSearchResult.mainImageAnalysisText = analysis;
+                }
+
             }).catch(e => { 
-                document.getElementById('image-analysis-result').innerHTML = `<strong class="text-red-600">분석 실패:</strong> AI가 이미지를 분석할 수 없습니다.`; 
+                console.error("Gemini analysis failed:", e);
+                document.getElementById('image-analysis-result').innerHTML = `<strong class="text-red-600">분석 실패:</strong> AI가 이미지를 분석할 수 없습니다. (Gemini 오류)`; 
             });
         } else {
             throw new Error("Failed to get base64 data from source");
         }
     } catch (error) {
         console.error("Image analysis prep failed:", error);
-        document.getElementById('image-analysis-result').innerHTML = `<strong class="text-red-600">분석 실패:</strong> 이미지 소스를 처리할 수 없습니다.`;
+        // 사용자에게 표시되는 최종 오류 메시지
+        document.getElementById('image-analysis-result').innerHTML = `<strong class="text-red-600">분석 실패:</strong> 이미지 소스를 처리할 수 없습니다. (${error.message})`;
     }
 }
+// ⭐️⭐️⭐️ [여기까지 코드 통합 완료] ⭐️⭐️⭐️
+
+
 window.showImageModal = function(src) { modalImage.src = src; imageModalContainer.classList.remove('hidden'); imageModalContainer.classList.add('flex'); safeCreateIcons(); }
 window.hideImageModal = function() { imageModalContainer.classList.add('hidden'); imageModalContainer.classList.remove('flex'); modalImage.src = ''; }
 function renderEncyclopediaSection(title, content_en, content_ko) { const safe_content_en = content_en || ''; const safe_content_ko = content_ko || ''; if (!safe_content_en && !safe_content_ko) return ''; return `<div class="mt-6"><h4 class="text-xl font-bold mb-2">${title}</h4><div class="prose max-w-none text-justify space-y-4"><p class="text-gray-700">${safe_content_ko.replace(/\n/g, '<br>')}</p><details class="text-sm"><summary class="cursor-pointer text-gray-500">영어 원문 보기</summary><p class="mt-2 text-gray-600">${addClickToSearch(safe_content_en.replace(/\n/g, '<br>'))}</p></details></div></div>`; }

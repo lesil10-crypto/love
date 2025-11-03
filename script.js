@@ -565,7 +565,7 @@ async function checkAndLoadPage(word) {
 }
 
 
-// ⭐️ [요청 1, 2] 수정
+// ⭐️⭐️⭐️ [코드 통합] 'globe' 중복 버그를 수정한 최종 handleSearch 함수 ⭐️⭐️⭐️
 async function handleSearch(query) {
     // [REMOVED] if (!isSearchUnlocked) return;
     // [MODIFIED] Check for userId instead of auth.currentUser
@@ -579,8 +579,12 @@ async function handleSearch(query) {
             const ambiguityPrompt = `한국어 단어 "${query}"가 여러 개의 뚜렷하게 다른 영어 단어로 번역될 수 있나요? (예: '배' -> ship, pear, stomach). 다음 JSON 형식으로만 대답해줘: {"is_ambiguous": boolean, "english_words": ["단어1", "단어2", ...]}. 모호하지 않으면 "english_words" 배열에 대표 영어 단어 하나만 포함해줘.`;
             const ambiguityData = await callGemini(ambiguityPrompt, true);
             
-            // ⭐️ [요청 2] Set을 사용해 중복된 영어 단어 제거
-            const uniqueEnglishWords = [...new Set(ambiguityData.english_words.filter(word => word))]; // null/undefined/빈 문자열 제거
+            // ⭐️ [버그 수정] Set을 사용하기 전에 소문자 변환 및 공백 제거
+            const normalizedEnglishWords = ambiguityData.english_words
+                .filter(word => word) // 1. null/undefined/빈 문자열 제거
+                .map(word => word.toLowerCase().trim()); // 2. 소문자 변환 및 공백 제거
+                
+            const uniqueEnglishWords = [...new Set(normalizedEnglishWords)]; // 3. Set으로 중복 제거
             
             if (ambiguityData.is_ambiguous && uniqueEnglishWords.length > 1) {
                 showToast(`'${query}'에 대해 ${uniqueEnglishWords.length}개의 의미를 찾았습니다. 각각 탭으로 표시합니다.`, "info");
@@ -606,6 +610,8 @@ async function handleSearch(query) {
         await checkAndLoadPage(query); 
     }
 }
+// ⭐️⭐️⭐️ [여기까지 코드 통합 완료] ⭐️⭐️⭐️
+
 
 async function executeSearchForWord(wordQuery, makeActive = true) {
     const tabId = addTab(wordQuery, makeActive);

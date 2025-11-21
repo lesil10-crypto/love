@@ -25,7 +25,10 @@ let searchInput, searchButton, loadingContainer, loadingText, progressBar, searc
     searchChoiceNewSearchBtn, searchChoiceCancelBtn,
     currentChoicePageData;
 
+// [설정] 텍스트는 Gemini, 이미지는 Imagen을 사용
 const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
+// ⭐️ [중요] 구글 클라우드 크레딧을 소진하며 이미지를 생성하는 Google Imagen 엔드포인트
+const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict`;
 
 const translationCache = {};
 
@@ -42,44 +45,131 @@ let savedWords = [];
 let savedSentences = [];
 
 // =========================================================================
-// === 주요 함수 정의 ===
+// === 1. Google Imagen 이미지 생성 함수 (복구됨) ===
 // =========================================================================
 
-// [이미지 생성 함수 수정됨] 안정성 강화 버전
 async function callImagenWithRetry(prompt, retries = 3) {
-    try {
-        // ⭐️ 중요: 프롬프트가 너무 길면 502 에러가 발생하므로 300자로 제한합니다.
-        const safePrompt = prompt.length > 300 ? prompt.substring(0, 300) : prompt;
-        const encodedPrompt = encodeURIComponent(safePrompt);
-        
-        // 랜덤 시드 및 고해상도 설정
-        const randomSeed = Math.floor(Math.random() * 10000);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${randomSeed}&nologo=true&width=1024&height=1024&model=flux`;
+    // Imagen API 요청 형식
+    const payload = { 
+        instances: [{ prompt: prompt }], 
+        parameters: { "sampleCount": 1 } 
+    };
 
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-            throw new Error(`Image generation failed with status: ${response.status}`);
+    for (let i = 0; i < retries; i++) {
+        try {
+            // 백엔드 프록시(/api/callGemini)를 통해 Google API 호출
+            const result = await fetchWithRetry(imageApiUrl, payload);
+            
+            // Imagen 응답에서 Base64 이미지 데이터 추출
+            const base64Data = result.predictions?.[0]?.bytesBase64Encoded;
+            
+            if (!base64Data) {
+                // 에러 처리
+                const reason = result.error?.message || result.predictions?.[0]?.error || "Unknown error";
+                console.warn(`Imagen generation failed (attempt ${i + 1}):`, reason);
+                
+                if (reason.includes("404") || reason.includes("not found")) {
+                    throw new Error("Model Not Found (404) - 구글 클라우드 콘솔에서 API 활성화 필요");
+                }
+                if (reason.includes("policy")) { 
+                    throw new Error("Policy Violation"); 
+                }
+                
+                if (i === retries - 1) throw new Error(reason);
+                
+                // 재시도 대기
+                const delay = 1000 * Math.pow(2, i) + Math.random() * 500;
+                await new Promise(res => setTimeout(res, delay));
+                continue;
+            }
+            
+            // 성공 시 Data URL 반환
+            return { url: `data:image/png;base64,${base64Data}`, status: 'success' };
+
+        } catch (e) {
+            if (e.message.includes("Policy Violation")) { 
+                return { url: `https://placehold.co/600x600/ff9800/ffffff?text=Policy+Filtered`, status: 'policy_failed' }; 
+            }
+            if (e.message.includes("404")) {
+                console.error("Google Cloud Project Error:", e);
+                // 404 에러 시 안내 토스트 띄우기 (최초 1회만)
+                if(i === 0) showToast("Google Imagen 모델을 찾을 수 없습니다. Google Cloud Console에서 권한을 확인하세요.", "error");
+                return { url: `https://placehold.co/600x600/e74c3c/ffffff?text=Check+Google+Cloud+Console`, status: 'failed' };
+            }
+            
+            if (i === retries - 1) { 
+                console.error("Imagen API call failed after retries:", e); 
+                return { url: `https://placehold.co/600x600/e74c3c/ffffff?text=Image+Load+Failed`, status: 'failed' }; 
+            }
+            const delay = 1000 * Math.pow(2, i) + Math.random() * 500;
+            await new Promise(res => setTimeout(res, delay));
         }
-        
-        const blob = await response.blob();
-        
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                resolve({ url: reader.result, status: 'success' });
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-
-    } catch (e) {
-        console.error("Image generation failed:", e);
-        // ⭐️ 실패 시 빨간 에러 박스 대신 깔끔한 회색 대체 이미지를 보여줍니다.
-        return { 
-            url: `https://placehold.co/600x600/f1f5f9/64748b?text=${encodeURIComponent("Image\\nNot Available")}`, 
-            status: 'success' // 에러 처리를 피하기 위해 success로 처리하되 플레이스홀더 반환
-        };
     }
+    return { url: `https://placehold.co/600x600/e74c3c/ffffff?text=Image+Load+Failed`, status: 'failed' };
+}
+
+// =========================================================================
+// === 2. API Communication Wrapper ===
+// =========================================================================
+
+async function fetchWithRetry(baseUrl, payload, retries = 3) {
+  const OUR_BACKEND_API = '/api/callGemini'; 
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(OUR_BACKEND_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    googleApiUrl: baseUrl,
+                    payload: payload
+                })
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                console.error(`백엔드 서버 오류: ${response.status} - ${errorBody}`);
+                // 404 에러를 throw하여 callImagenWithRetry에서 잡을 수 있게 함
+                if (response.status === 404) throw new Error("404 Not Found");
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return await response.json(); 
+        } catch (error) {
+            if (error.message.includes("404")) throw error; // 404는 재시도하지 않음
+            
+            if (i === retries - 1) {
+                console.error("API 호출 최종 실패:", error);
+                // showToast("AI 서버 응답에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
+                throw error;
+            }
+            const delay = 1000 * Math.pow(2, i) + Math.random() * 1000;
+            await new Promise(res => setTimeout(res, delay));
+        }
+    }
+}
+
+async function callGemini(prompt, isJson = false, base64Image = null) {
+    const parts = [{ text: prompt }];
+    if (base64Image) {
+        parts.push({
+            inlineData: {
+                mimeType: "image/png",
+                data: base64Image
+            }
+        });
+    }
+    const payload = { contents: [{ parts: parts }], };
+    if (isJson) { payload.generationConfig = { responseMimeType: "application/json" }; }
+    const result = await fetchWithRetry(textApiUrl, payload);
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) { console.error("Empty response from Gemini:", result); throw new Error("Gemini API response is empty."); }
+    if (isJson) {
+        let jsonString = text.trim();
+        if (jsonString.startsWith("```json")) { jsonString = jsonString.slice(7, -3).trim(); }
+        else if (jsonString.startsWith("```")) { jsonString = jsonString.slice(3, -3).trim(); }
+        try { return JSON.parse(jsonString); }
+        catch (error) { console.error("Failed to parse JSON:", error); console.error("Original text from API:", text); throw error; }
+    }
+    return text;
 }
 
 // ... (이하 코드는 기존 로직 유지) ...
@@ -421,65 +511,6 @@ window.signInWithGoogle = async function() {
 }
 
 // ---------------------------
-// API Communication Functions
-// ---------------------------
-async function fetchWithRetry(baseUrl, payload, retries = 3) {
-  const OUR_BACKEND_API = '/api/callGemini'; 
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(OUR_BACKEND_API, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    googleApiUrl: baseUrl,
-                    payload: payload
-                })
-            });
-
-            if (!response.ok) {
-                const errorBody = await response.text();
-                console.error(`백엔드 서버 오류: ${response.status} - ${errorBody}`);
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return await response.json(); 
-        } catch (error) {
-            if (i === retries - 1) {
-                console.error("API 호출 최종 실패:", error);
-                showToast("AI 서버 응답에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
-                throw error;
-            }
-            const delay = 1000 * Math.pow(2, i) + Math.random() * 1000;
-            await new Promise(res => setTimeout(res, delay));
-        }
-    }
-}
-
-async function callGemini(prompt, isJson = false, base64Image = null) {
-    const parts = [{ text: prompt }];
-    if (base64Image) {
-        parts.push({
-            inlineData: {
-                mimeType: "image/png",
-                data: base64Image
-            }
-        });
-    }
-    const payload = { contents: [{ parts: parts }], };
-    if (isJson) { payload.generationConfig = { responseMimeType: "application/json" }; }
-    const result = await fetchWithRetry(textApiUrl, payload);
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) { console.error("Empty response from Gemini:", result); throw new Error("Gemini API response is empty."); }
-    if (isJson) {
-        let jsonString = text.trim();
-        if (jsonString.startsWith("```json")) { jsonString = jsonString.slice(7, -3).trim(); }
-        else if (jsonString.startsWith("```")) { jsonString = jsonString.slice(3, -3).trim(); }
-        try { return JSON.parse(jsonString); }
-        catch (error) { console.error("Failed to parse JSON:", error); console.error("Original text from API:", text); throw error; }
-    }
-    return text;
-}
-
-// ---------------------------
 // Core Logic
 // ---------------------------
 
@@ -777,52 +808,6 @@ window.renderMeanings = async function(meanings, word, searchId, currentTab, mai
         if (currentTab.fullSearchResult.meaningsData?.[index]) { currentTab.fullSearchResult.meaningsData[index].examples = examples; }
         const examplesHtml = examples.map((ex, i) => `<li class="flex items-start justify-between gap-3 mt-2"><div class="flex items-start"><span class="text-gray-500 mr-2">${i + 1}.</span><div><p class="text-md font-medium">${addClickToSearch(ex.en)}</p><p class="text-sm text-gray-500">${ex.ko}</p></div></div><div class="flex items-center flex-shrink-0 gap-1"><button class="icon-btn" onclick="speak('${ex.en.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button><button class="icon-btn" onclick="speak('${ex.ko.replace(/'/g, "\\'")}', 'ko-KR')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">한국어 듣기</span></button><button class="icon-btn" onclick="saveSentence('${ex.en.replace(/'/g, "\\'")}', '${ex.ko.replace(/'/g, "\\'")}')">${createSaveIcon('w-5 h-5')}<span class="tooltip">저장하기</span></button></div></li>`).join('');
         element.innerHTML += `<p class="font-medium mt-4 mb-2">대표 예문:</p><div class="bg-slate-200 p-4 rounded-lg"><div><p class="text-lg font-semibold">${addClickToSearch(meaning.exampleSentence)}</p><p class="text-md text-gray-600">${meaning.exampleSentenceTranslation}</p></div><div class="flex items-center gap-2 mt-2"><button class="icon-btn" onclick="speak('${meaning.exampleSentence.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button><button class="icon-btn" onclick="speak('${meaning.exampleSentenceTranslation.replace(/'/g, "\\'")}', 'ko-KR')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">한국어 듣기</span></button><button class="icon-btn" onclick="saveSentence('${meaning.exampleSentence.replace(/'/g, "\\'")}', '${meaning.exampleSentenceTranslation.replace(/'/g, "\\'")}')">${createSaveIcon('w-5 h-5')}<span class="tooltip">저장하기</span></button></div></div><p class="font-medium mt-4 mb-2">추가 예문:</p><ul class="list-inside space-y-2">${examplesHtml}</ul>`;
-    }
-    safeCreateIcons();
-}
-
-function renderSavedMeanings(meaningsData, word, mainContainer) {
-    const container = document.createElement('div');
-    container.className = 'card p-6 space-y-8';
-    container.innerHTML = `<h3 class="text-2xl font-bold mb-4 flex items-center"><i data-lucide="book-open-check" class="mr-2 text-green-600"></i>의미 분석</h3>`;
-    mainContainer.appendChild(container);
-    if (!meaningsData) return;
-    for (const [index, meaning] of meaningsData.entries()) {
-        const element = document.createElement('div');
-        element.className = 'border-t border-slate-300 pt-6';
-        const imageUrl = meaning.imageUrl || "https://placehold.co/300x300/e0e5ec/4a5568?text=No+Image";
-        element.innerHTML = `<h4 class="text-xl font-semibold text-blue-700">${meaning.type}</h4>
-            <img id="meaning-image-${index}" src="${imageUrl}" alt="${meaning.type}" class="rounded-lg shadow-md w-full h-auto object-cover mb-4 max-w-sm mx-auto clickable-image" onclick="showImageModal('${imageUrl}')">
-            <p class="text-gray-600 my-2">${meaning.description}</p>`;
-        
-        const examples = meaning.examples || [];
-        const examplesHtml = examples.map((ex, i) => 
-            `<li class="flex items-start justify-between gap-3 mt-2">
-                <div class="flex items-start">
-                    <span class="text-gray-500 mr-2">${i + 1}.</span>
-                    <div><p class="text-md font-medium">${addClickToSearch(ex.en)}</p><p class="text-sm text-gray-500">${ex.ko}</p></div>
-                </div>
-                <div class="flex items-center flex-shrink-0 gap-1">
-                    <button class="icon-btn" onclick="speak('${ex.en.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button>
-                    <button class="icon-btn" onclick="speak('${ex.ko.replace(/'/g, "\\'")}', 'ko-KR')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">한국어 듣기</span></button>
-                    <button class="icon-btn" onclick="saveSentence('${ex.en.replace(/'/g, "\\'")}', '${ex.ko.replace(/'/g, "\\'")}')">${createSaveIcon('w-5 h-5')}<span class="tooltip">저장하기</span></button>
-                </div>
-            </li>`
-        ).join('');
-
-        element.innerHTML += `
-            <p class="font-medium mt-4 mb-2">대표 예문:</p>
-            <div class="bg-slate-200 p-4 rounded-lg">
-                <div><p class="text-lg font-semibold">${addClickToSearch(meaning.exampleSentence)}</p><p class="text-md text-gray-600">${meaning.exampleSentenceTranslation}</p></div>
-                <div class="flex items-center gap-2 mt-2">
-                    <button class="icon-btn" onclick="speak('${meaning.exampleSentence.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button>
-                    <button class="icon-btn" onclick="speak('${meaning.exampleSentenceTranslation.replace(/'/g, "\\'")}', 'ko-KR')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">한국어 듣기</span></button>
-                    <button class="icon-btn" onclick="saveSentence('${meaning.exampleSentence.replace(/'/g, "\\'")}', '${meaning.exampleSentenceTranslation.replace(/'/g, "\\'")}')">${createSaveIcon('w-5 h-5')}<span class="tooltip">저장하기</span></button>
-                </div>
-            </div>
-            <p class="font-medium mt-4 mb-2">추가 예문:</p>
-            <ul class="list-inside space-y-2">${examplesHtml}</ul>`;
-        container.appendChild(element);
     }
     safeCreateIcons();
 }

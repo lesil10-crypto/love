@@ -1,12 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-// [NEW] Google Auth import
-import { getAuth, signInAnonymously, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, writeBatch, getDocs, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-// [NEW] Added uploadBytes
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, writeBatch, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadBytes } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-// === GitHub Pages 배포를 위한 하드코딩된 설정 ===
-// [SECURITY WARNING] 이 키들은 클라이언트 사이드에 노출되면 안 됩니다. 
-// Github Pages에서는 Firebase App Check와 Firestore 보안 규칙으로 데이터를 보호해야 합니다.
+
+// === GitHub Pages 배포를 위한 설정 ===
 const USER_FIREBASE_CONFIG = {
  apiKey: "AIzaSyDKmpQO6htm7jZ2DByUfGnmocZP7dpTJhs",
  authDomain: "projec-48c55.firebaseapp.com",
@@ -16,7 +13,6 @@ const USER_FIREBASE_CONFIG = {
  appId: "1:376464552007:web:929b53196fc86af19dc162",
  measurementId: "G-HMKJMNFGM4"
 };
-// =========================================================================
 
 // 0. Initial Setup & Variable Declaration
 let searchInput, searchButton, loadingContainer, loadingText, progressBar, searchBarContainer,
@@ -25,14 +21,11 @@ let searchInput, searchButton, loadingContainer, loadingText, progressBar, searc
     listModalContainer, listModalTitle, listModalContent, sortOptions, markReadBtn,
     markUnreadBtn, deleteSelectedBtn, confirmCallback, confirmationModal,
     confirmationMessage, confirmOkBtn, confirmCancelBtn,
-    // ⭐️ [요청 1 추가] 검색 선택 모달 변수
     searchChoiceModal, searchChoiceWord, searchChoiceLoadSavedBtn, 
     searchChoiceNewSearchBtn, searchChoiceCancelBtn,
-    currentChoicePageData; // To hold the data for the load button
+    currentChoicePageData;
 
 const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
-// [변경] 이미지 API URL은 이제 사용하지 않지만 변수 선언은 유지합니다 (에러 방지)
-const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict`;
 
 const translationCache = {};
 
@@ -49,16 +42,54 @@ let savedWords = [];
 let savedSentences = [];
 
 // =========================================================================
-// === 모든 주요 함수들을 이곳에 먼저 정의합니다. ===
+// === 주요 함수 정의 ===
 // =========================================================================
 
-// ⭐️ [요청 1 추가] 검색 선택 모달 함수
+// [이미지 생성 함수 수정됨] 안정성 강화 버전
+async function callImagenWithRetry(prompt, retries = 3) {
+    try {
+        // ⭐️ 중요: 프롬프트가 너무 길면 502 에러가 발생하므로 300자로 제한합니다.
+        const safePrompt = prompt.length > 300 ? prompt.substring(0, 300) : prompt;
+        const encodedPrompt = encodeURIComponent(safePrompt);
+        
+        // 랜덤 시드 및 고해상도 설정
+        const randomSeed = Math.floor(Math.random() * 10000);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${randomSeed}&nologo=true&width=1024&height=1024&model=flux`;
+
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+            throw new Error(`Image generation failed with status: ${response.status}`);
+        }
+        
+        const blob = await response.blob();
+        
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                resolve({ url: reader.result, status: 'success' });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+
+    } catch (e) {
+        console.error("Image generation failed:", e);
+        // ⭐️ 실패 시 빨간 에러 박스 대신 깔끔한 회색 대체 이미지를 보여줍니다.
+        return { 
+            url: `https://placehold.co/600x600/f1f5f9/64748b?text=${encodeURIComponent("Image\\nNot Available")}`, 
+            status: 'success' // 에러 처리를 피하기 위해 success로 처리하되 플레이스홀더 반환
+        };
+    }
+}
+
+// ... (이하 코드는 기존 로직 유지) ...
+
 function showSearchChoiceModal(word, pageData) {
     searchChoiceWord.textContent = word;
-    currentChoicePageData = pageData; // 나중에 '로드' 버튼 클릭 시 사용할 데이터 저장
+    currentChoicePageData = pageData;
     searchChoiceModal.classList.remove('hidden');
     searchChoiceModal.classList.add('flex');
-    safeCreateIcons(); // 모달 내 아이콘 렌더링
+    safeCreateIcons();
 }
 
 function hideSearchChoiceModal() {
@@ -72,7 +103,7 @@ async function loadSavedPageFromChoice() {
     showToast("저장된 페이지를 불러옵니다...", "info");
     const tabId = addTab(word, true);
     const currentTab = tabs[tabId];
-    currentTab.fullSearchResult = currentChoicePageData; // 저장된 데이터 사용
+    currentTab.fullSearchResult = currentChoicePageData;
     await renderSavedPage(currentTab, currentChoicePageData);
     hideSearchChoiceModal();
 }
@@ -152,7 +183,6 @@ function safeCreateIcons() {
     }
 }
 
-// [NEW] Utility to convert base64 to Blob for uploading
 function base64ToBlob(base64, contentType = 'image/png') {
     const base64Data = base64.split(',')[1];
     if (!base64Data) {
@@ -173,15 +203,12 @@ function base64ToBlob(base64, contentType = 'image/png') {
     return new Blob(byteArrays, {type: contentType});
 }
 
-// [NEW] Utility to upload a base64 image and return URL
 async function uploadBase64Image(base64String, storagePath) {
     const blob = base64ToBlob(base64String);
     const storageRef = ref(storage, storagePath);
-    // Using uploadBytes for simplicity instead of resumable
     await uploadBytes(storageRef, blob); 
     return await getDownloadURL(storageRef);
 }
-
 
 // =========================================================================
 
@@ -215,7 +242,6 @@ async function initializeFirebase() {
     confirmCancelBtn = document.getElementById('confirm-cancel-btn');
     confirmCallback = null;
 
-    // ⭐️ [요청 1 추가] 검색 선택 모달 변수 할당
     searchChoiceModal = document.getElementById('search-choice-modal');
     searchChoiceWord = document.getElementById('search-choice-word');
     searchChoiceLoadSavedBtn = document.getElementById('search-choice-load-saved-btn');
@@ -292,7 +318,6 @@ async function initializeFirebase() {
     confirmOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } hideConfirmationModal(); });
     confirmCancelBtn.addEventListener('click', hideConfirmationModal);
 
-    // ⭐️ [요청 1 추가] 검색 선택 모달 리스너
     searchChoiceLoadSavedBtn.addEventListener('click', loadSavedPageFromChoice);
     searchChoiceNewSearchBtn.addEventListener('click', () => {
         const word = searchChoiceWord.textContent;
@@ -395,9 +420,8 @@ window.signInWithGoogle = async function() {
     }
 }
 
-
 // ---------------------------
-// 1. API Communication Functions
+// API Communication Functions
 // ---------------------------
 async function fetchWithRetry(baseUrl, payload, retries = 3) {
   const OUR_BACKEND_API = '/api/callGemini'; 
@@ -455,50 +479,8 @@ async function callGemini(prompt, isJson = false, base64Image = null) {
     return text;
 }
 
-// [수정됨] Google Imagen API 대신 무료 Pollinations.ai 서비스를 사용합니다.
-async function callImagenWithRetry(prompt, retries = 3) {
-    try {
-        // Pollinations.ai는 별도의 API 키 없이 URL에 프롬프트를 넣으면 이미지를 줍니다.
-        // 프롬프트를 URL에 맞게 인코딩합니다.
-        const encodedPrompt = encodeURIComponent(prompt);
-        
-        // 이미지 크기를 지정하고 싶다면 뒤에 ?width=1024&height=1024 등을 붙일 수 있습니다.
-        // 랜덤 시드를 추가하여 매번 다른 이미지가 나오도록 합니다.
-        const randomSeed = Math.floor(Math.random() * 10000);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${randomSeed}&nologo=true`;
-
-        // 이미지를 먼저 fetch로 가져와서 Blob으로 변환합니다.
-        // 이렇게 하면 1. CORS 문제 확인 가능, 2. base64로 변환하여 '저장' 기능 호환성 확보
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-            throw new Error(`Image generation failed with status: ${response.status}`);
-        }
-        
-        const blob = await response.blob();
-        
-        // Blob을 Data URL (Base64)로 변환하여 반환
-        // 기존 코드가 base64(data:image/...) 형식을 기대하고 저장 로직을 수행하기 때문입니다.
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                resolve({ url: reader.result, status: 'success' });
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-
-    } catch (e) {
-        console.error("Image generation failed:", e);
-        // 실패 시 기본 이미지 반환
-        return { 
-            url: `https://placehold.co/300x300/e74c3c/ffffff?text=Image+Error`, 
-            status: 'failed' 
-        };
-    }
-}
-
 // ---------------------------
-// 2. Core Logic: Search and Content Generation
+// Core Logic
 // ---------------------------
 
 window.checkSearchAccess = function() {
@@ -754,7 +736,7 @@ function renderDeletePageButton(container, word, replaceButtonId = null) {
 }
 
 // ---------------------------
-// 3. Rendering Functions (Made Global)
+// Rendering Functions
 // ---------------------------
 function renderPrintButton(tab) { const printButton = document.createElement('button'); printButton.id = `print-btn-${tab.id}`; printButton.className = 'btn-3d mb-4'; printButton.disabled = true; printButton.innerHTML = `<div class="loader w-5 h-5 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>인쇄 준비 중...`; printButton.onclick = () => handlePrint(tab.id); tab.contentEl.prepend(printButton); safeCreateIcons(); }
 window.renderBasicInfo = function(data, imageUrl, container) { const html = `<div class="card p-6"><div class="flex flex-col md:flex-row items-center gap-6"><div class="w-full md:w-2/5"><img id="main-image" src="${imageUrl}" alt="${data.word}" class="rounded-lg shadow-lg w-full h-auto object-cover clickable-image"></div><div class="w-full md:w-3/5"><div class="flex items-center gap-4 mb-4"><h2 class="text-5xl font-bold">${data.word}</h2><button onclick="speak('${data.word}', 'en-US')" class="btn-3d p-3">${createVolumeIcon()}</button><button id="pronunciation-btn" class="btn-3d p-3 text-purple-600" onclick="startPronunciationCheck('${data.word}')">✨ 발음 피드백</button></div><div class="flex items-center gap-2"><p class="text-2xl text-gray-600">${data.koreanMeaning}</p><button onclick="speak('${data.koreanMeaning}', 'ko-KR')" class="btn-3d p-3">${createVolumeIcon()}</button></div><p class="text-lg text-gray-500 mt-2">[${data.pronunciation}]</p><div id="pronunciation-feedback" class="mt-4 p-3 rounded-lg bg-yellow-100 text-yellow-700 hidden"></div></div></div></div>`; container.insertAdjacentHTML('beforeend', html); safeCreateIcons(); }
@@ -783,7 +765,6 @@ window.renderMeanings = async function(meanings, word, searchId, currentTab, mai
                     imgEl.src = imageResult.url;
 
                     if (imageResult.status === 'success') { imgEl.onclick = () => showImageModal(imageResult.url); }
-                    else if (imageResult.status === 'policy_failed') { imgEl.title = "정책 필터링으로 인해 이미지를 표시할 수 없습니다."; imgEl.onclick = () => showToast("경고: 이미지가 정책에 의해 필터링되었습니다.", "warning"); const policyMessage = document.createElement('p'); policyMessage.className = 'text-sm text-red-500 mt-2 p-2 border border-red-300 rounded'; policyMessage.textContent = '이미지 생성 요청이 정책에 의해 거부되었습니다.'; imgEl.parentNode.insertBefore(policyMessage, imgEl.nextSibling); }
                     else { imgEl.title = "이미지 생성에 실패했습니다."; imgEl.onclick = () => showToast("경고: 이미지 생성에 실패했습니다.", "error"); }
                 } else { reject(new Error('Tab changed')); }
             }).catch(error => { console.error(`Failed to load image for meaning ${index}:`, error); imgEl.src = `https://placehold.co/300x300/e74c3c/ffffff?text=Image+Load+Failed`; reject(error); });
@@ -852,7 +833,7 @@ window.renderSection = function(title, icon, content) { return `<div class="bord
 window.renderQuiz = function(title, icon, quizData) { const quizContent = quizData.map((q, index) => { const optionsHtml = q.options.map(option => `<label class="block"><input type="radio" name="quiz-${index}" value="${option}" class="mr-2">${option}</label>`).join(''); return `<div class="mt-4 bg-slate-200 p-4 rounded-lg" id="quiz-container-${index}"><p class="font-semibold">${index + 1}. ${q.question}</p><div class="my-2 space-y-1">${optionsHtml}</div><button onclick="checkQuizAnswer(this, ${index}, '${q.answer.replace(/'/g, "\\'")}')" class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 quiz-button">정답 확인</button><div id="quiz-explanation-${index}" class="hidden mt-2 p-2 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700"><p><strong class="font-bold">정답: ${q.answer}</strong></p><p>${q.explanation}</p></div></div>`; }).join(''); return renderSection(title, icon, quizContent); }
 
 // ---------------------------
-// 4. UI/UX and Utility Functions
+// UI/UX Utility Functions
 // ---------------------------
 function createVolumeIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-blue-500"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`; }
 function createSaveIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-green-600"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>`; }
@@ -865,7 +846,7 @@ window.speak = function(text, lang = 'en-US') { if (!('speechSynthesis' in windo
 window.startPronunciationCheck = function(word) { const feedbackDiv = document.getElementById('pronunciation-feedback'); feedbackDiv.classList.add('hidden'); const message = `🎤 "${word}" 발음 녹음을 준비합니다. (실제 기능에서는 Gemini TTS API를 사용합니다.)`; showToast(message, 'info'); setTimeout(async () => { const prompt = `Act as an English teacher. Evaluate the pronunciation of the word "${word}" based on a typical non-native Korean speaker attempting to say it. Give encouraging but specific feedback. Format as a short paragraph in Korean.`; try { const feedbackText = await callGemini(prompt); feedbackDiv.innerHTML = `<i data-lucide="mic-vocal" class="inline-block mr-2 text-purple-600"></i><strong class="text-purple-700">AI 발음 피드백:</strong> ${feedbackText}`; feedbackDiv.classList.remove('hidden'); safeCreateIcons(); } catch (e) { feedbackDiv.innerHTML = `<i data-lucide="x-circle" class="inline-block mr-2 text-red-600"></i><strong class="text-red-700">AI 발음 피드백:</strong> 피드백 생성에 실패했습니다.`; feedbackDiv.classList.remove('hidden'); safeCreateIcons(); } }, 5000); }
 
 // ---------------------------
-// 5. Modal and Tooltip Functions
+// Modal and Tooltip Functions
 // ---------------------------
 
 window.showImageAnalysisModal = async function(src, word, meaning) { 

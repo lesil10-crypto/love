@@ -32,7 +32,7 @@ let searchInput, searchButton, loadingContainer, loadingText, progressBar, searc
     currentChoicePageData; // To hold the data for the load button
 
 const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
-const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict`;
+const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict`;
 
 const translationCache = {};
 

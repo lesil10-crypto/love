@@ -19,7 +19,6 @@ const USER_FIREBASE_CONFIG = {
 // =========================================================================
 
 // 0. Initial Setup & Variable Declaration
-// ⭐️ [수정됨] const ... getElementById(...) 를 모두 let으로 변경
 let searchInput, searchButton, loadingContainer, loadingText, progressBar, searchBarContainer,
     printContainer, printContentArea, modalContainer, modalContent, imageModalContainer,
     modalImage, wordTooltip, fileModalContainer, fileUploadInput, fileUploadButton,
@@ -32,6 +31,7 @@ let searchInput, searchButton, loadingContainer, loadingText, progressBar, searc
     currentChoicePageData; // To hold the data for the load button
 
 const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
+// [변경] 이미지 API URL은 이제 사용하지 않지만 변수 선언은 유지합니다 (에러 방지)
 const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict`;
 
 const translationCache = {};
@@ -39,11 +39,7 @@ const translationCache = {};
 // Firebase Setup
 let db, auth, storage, userId;
 let app;
-const appId = 'default-ai-vocab-app'; // [REMOVED] 'auth-container' related vars
-
-// [REMOVED] Password variables
-// const SEARCH_PASSWORD = '6195';
-// let isSearchUnlocked = false;
+const appId = 'default-ai-vocab-app';
 
 // Tab Management
 let tabs = {};
@@ -80,7 +76,6 @@ async function loadSavedPageFromChoice() {
     await renderSavedPage(currentTab, currentChoicePageData);
     hideSearchChoiceModal();
 }
-// ⭐️ [여기까지 요청 1 추가]
 
 function renderFileList(files) {
     const fileListDiv = document.getElementById('file-list');
@@ -191,7 +186,6 @@ async function uploadBase64Image(base64String, storagePath) {
 // =========================================================================
 
 async function initializeFirebase() {
-    // ⭐️ [수정됨] DOM 요소 변수들을 여기서 할당합니다. (DOMContentLoaded 이후)
     searchInput = document.getElementById('search-input');
     searchButton = document.getElementById('search-button');
     loadingContainer = document.getElementById('loading-container');
@@ -228,7 +222,6 @@ async function initializeFirebase() {
     searchChoiceNewSearchBtn = document.getElementById('search-choice-new-search-btn');
     searchChoiceCancelBtn = document.getElementById('search-choice-cancel-btn');
     currentChoicePageData = null;
-    // ⭐️ [여기까지 수정]
 
     const firebaseConfig = USER_FIREBASE_CONFIG;
     try {
@@ -242,13 +235,10 @@ async function initializeFirebase() {
         db = getFirestore(app);
         auth = getAuth(app);
         storage = getStorage(app,"gs://projec-48c55.firebasestorage.app");
-        setLogLevel('debug'); // 'info' or 'debug' for more logs                                                                                                                                                                           // ⬆️⬆️⬆️ [여기까지 새로 추가] ⬆️⬆️⬆️
-                 // [NEW] Handle Google Login Redirect Result
-            // 사용자가 Google 로그인을 마치고 돌아왔는지 확인합니다.
+        setLogLevel('debug'); 
           
      onAuthStateChanged(auth, (user) => {
             if (user) {
-                // User is signed in
                 userId = user.uid;
                 console.log("Authenticated with Google. User ID:", userId);
                 document.getElementById('auth-status').innerHTML = `
@@ -257,42 +247,34 @@ async function initializeFirebase() {
                 `;
                 document.getElementById('google-logout-btn').onclick = () => signOut(auth);
                 
-                // Show main app and hide auth button
                 document.getElementById('app-container').style.visibility = 'visible';
                 document.getElementById('auth-container').classList.add('hidden');
                 
-                // [MODIFIED] Enable search bar now that user is logged in
                 searchInput.disabled = false;
                 searchInput.classList.remove('cursor-pointer', 'disabled:cursor-not-allowed');
                 searchInput.placeholder = "영단어 또는 한글 뜻을 입력하세요...";
 
-                // Load user-specific data
                 loadUserLists();
                 listenForFiles();
 
-                // 팁: 인증 핸들러 페이지에 있다면 메인 페이지로 이동시킵니다.
                 if (window.location.pathname.startsWith('/__/auth/handler')) {
                     window.history.replaceState({}, document.title, '/');
                 }
 
             } else {
-                // User is signed out
                 userId = null;
                 console.log("User is signed out.");
                 document.getElementById('auth-status').innerHTML = `
                     <span class="text-sm">로그인이 필요합니다.</span>
                 `;
                 
-                // Hide main app and show auth button
                 document.getElementById('app-container').style.visibility = 'hidden';
                 document.getElementById('auth-container').classList.remove('hidden');
 
-                // [MODIFIED] Disable search bar
                 searchInput.disabled = true;
                 searchInput.classList.add('cursor-pointer', 'disabled:cursor-not-allowed');
                 searchInput.placeholder = "Google 로그인이 필요합니다...";
 
-                // Clear any sensitive data
                 savedWords = [];
                 savedSentences = [];
                 renderFileList([]);
@@ -300,18 +282,13 @@ async function initializeFirebase() {
             safeCreateIcons();
         });
 
-        // [MODIFIED] Using Google Auth instead of Anonymous
-        // Listen for auth state changes
-        
-
     } catch (error) {
         console.error("Firebase Initialization Error: ", error);
         showToast("데이터베이스 연결 또는 인증에 실패했습니다.", "error");
         document.getElementById('app-container').style.visibility = 'visible';
-        document.getElementById('auth-container').classList.add('hidden'); // Hide auth on error
+        document.getElementById('auth-container').classList.add('hidden'); 
     }
 
-    // ⭐️ [수정됨] 모든 이벤트 리스너를 이곳으로 이동
     confirmOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } hideConfirmationModal(); });
     confirmCancelBtn.addEventListener('click', hideConfirmationModal);
 
@@ -319,7 +296,7 @@ async function initializeFirebase() {
     searchChoiceLoadSavedBtn.addEventListener('click', loadSavedPageFromChoice);
     searchChoiceNewSearchBtn.addEventListener('click', () => {
         const word = searchChoiceWord.textContent;
-        executeSearchForWord(word); // 새 검색 실행
+        executeSearchForWord(word); 
         hideSearchChoiceModal();
     });
     searchChoiceCancelBtn.addEventListener('click', hideSearchChoiceModal);
@@ -373,12 +350,11 @@ async function initializeFirebase() {
     document.addEventListener('mouseout', (e) => { if (e.target.classList.contains('clickable-word')) { wordTooltip.classList.add('hidden'); } });
 
     document.addEventListener('click', (e) => { 
-        // ⭐️ [요청 1, 4] clickable-word 클릭 시 checkAndLoadPage 호출
         if (e.target.classList.contains('clickable-word') && userId) { 
             const word = e.target.textContent.trim().replace(/[^a-zA-Z-]/g, ''); 
             if (word) { 
                 searchInput.value = word; 
-                checkAndLoadPage(word); // 저장 여부 확인 함수 호출
+                checkAndLoadPage(word); 
                 hideListModal(); 
             } 
         } 
@@ -387,13 +363,12 @@ async function initializeFirebase() {
             const word = listItemTarget.dataset.word; 
             if(word) {
                 searchInput.value = word;
-                checkAndLoadPage(word); // 저장 여부 확인 함수 호출
+                checkAndLoadPage(word);
                 hideListModal(); 
             }
         }
     });
 
-    // ⭐️ [요청 1] 검색 버튼 클릭 시 handleSearch -> checkAndLoadPage 호출
     searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && userId) { handleSearch(searchInput.value.trim()); } });
     document.getElementById('word-list-btn').addEventListener('click', () => showListModal('words'));
     document.getElementById('sentence-list-btn').addEventListener('click', () => showListModal('sentences'));
@@ -401,28 +376,19 @@ async function initializeFirebase() {
     document.getElementById('share-btn').addEventListener('click', () => { if(navigator.share) { navigator.share({ title: 'AI Vocabulary Builder', text: 'AI와 함께 새로운 단어를 배워보세요!', url: window.location.href }).catch(err => console.error("Share failed", err)); } else { try { navigator.clipboard.writeText(window.location.href); showToast("링크가 클립보드에 복사되었습니다.", "success"); } catch (err) { console.error("Clipboard write failed:", err); showToast("클립보드 복사 실패.", "error"); } } });
     sortOptions.addEventListener('change', (e) => { currentSort = e.target.value; renderList(); });
     markReadBtn.addEventListener('click', () => performBulkAction('mark-read'));
-    markUnreadBtn.addEventListener('click', () => performBulkAction('mark-unread')); // [FIXED]
+    markUnreadBtn.addEventListener('click', () => performBulkAction('mark-unread')); 
     deleteSelectedBtn.addEventListener('click', () => performBulkAction('delete'));
-    // ⭐️ [여기까지 수정]
 
-} // <-- initializeFirebase 함수 끝
+} 
 
-// [NEW] Google Sign-In Function
-// [NEW] Google Sign-In Function (Redirect method)
 window.signInWithGoogle = async function() {
     const provider = new GoogleAuthProvider();
     try {
-        // [수정] signInWithRedirect -> signInWithPopup
         const result = await signInWithPopup(auth, provider);
-        
-        // 팝업은 onAuthStateChanged가 자동으로 감지하지만,
-        // 즉시 환영 인사를 띄워줄 수 있습니다.
         console.log("Popup Sign-In successful:", result.user.displayName);
         showToast(`${result.user.displayName}님, 환영합니다!`, "success");
-
     } catch (error) {
         console.error("Google Sign-In Popup Error:", error);
-        // 사용자가 팝업을 그냥 닫은 경우(auth/popup-closed-by-user)는 오류가 아닙니다.
         if (error.code !== 'auth/popup-closed-by-user') {
             showToast("Google 팝업 로그인에 실패했습니다.", "error");
         }
@@ -434,44 +400,35 @@ window.signInWithGoogle = async function() {
 // 1. API Communication Functions
 // ---------------------------
 async function fetchWithRetry(baseUrl, payload, retries = 3) {
-  // baseUrl = "https://generativelanguage..." (원래 Google 주소)
-    // payload = { contents: [...] } (원래 Gemini 요청 내용)
+  const OUR_BACKEND_API = '/api/callGemini'; 
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(OUR_BACKEND_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    googleApiUrl: baseUrl,
+                    payload: payload
+                })
+            });
 
-      // 이제 Google이 아닌, Vercel에 배포된 우리 서버 주소를 호출합니다.
-        // '/api/callGemini'는 Vercel이 자동으로 인식하는 주소입니다.
-          const OUR_BACKEND_API = '/api/callGemini'; 
-
-            for (let i = 0; i < retries; i++) {
-                try {
-                      const response = await fetch(OUR_BACKEND_API, {
-                              method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                              body: JSON.stringify({
-                                                        googleApiUrl: baseUrl, // "이 주소로 대신 요청해줘"
-                                                                  payload: payload       // "이 내용을 담아서"
-                                                                          })
-                                                                                });
-
-                                                                                      if (!response.ok) {
-                                                                                              const errorBody = await response.text();
-                                                                                                      console.error(`백엔드 서버 오류: ${response.status} - ${errorBody}`);
-                                                                                                              throw new Error(`HTTP error! status: ${response.status}`);
-                                                                                                                    }
-
-                                                                                                                          // Vercel 서버가 Google로부터 받아온 응답(JSON)을 반환합니다.
-                                                                                                                                return await response.json(); 
-
-                                                                                                                                    } catch (error) {
-                                                                                                                                          if (i === retries - 1) {
-                                                                                                                                                  console.error("API 호출 최종 실패:", error);
-                                                                                                                                                          showToast("AI 서버 응답에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
-                                                                                                                                                                  throw error;
-                                                                                                                                                                        }
-                                                                                                                                                                              const delay = 1000 * Math.pow(2, i) + Math.random() * 1000;
-                                                                                                                                                                                    await new Promise(res => setTimeout(res, delay));
-                                                                                                                                                                                        }
-                                                                                                                                                                                          }
-                                                                                                                                                                                          }
+            if (!response.ok) {
+                const errorBody = await response.text();
+                console.error(`백엔드 서버 오류: ${response.status} - ${errorBody}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return await response.json(); 
+        } catch (error) {
+            if (i === retries - 1) {
+                console.error("API 호출 최종 실패:", error);
+                showToast("AI 서버 응답에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
+                throw error;
+            }
+            const delay = 1000 * Math.pow(2, i) + Math.random() * 1000;
+            await new Promise(res => setTimeout(res, delay));
+        }
+    }
+}
 
 async function callGemini(prompt, isJson = false, base64Image = null) {
     const parts = [{ text: prompt }];
@@ -498,77 +455,82 @@ async function callGemini(prompt, isJson = false, base64Image = null) {
     return text;
 }
 
+// [수정됨] Google Imagen API 대신 무료 Pollinations.ai 서비스를 사용합니다.
 async function callImagenWithRetry(prompt, retries = 3) {
-    const payload = { instances: [{ prompt: prompt }], parameters: { "sampleCount": 1 } };
-    for (let i = 0; i < retries; i++) {
-        try {
-            const result = await fetchWithRetry(imageApiUrl, payload);
-            const base64Data = result.predictions?.[0]?.bytesBase64Encoded;
-            if (!base64Data) {
-                const reason = result.predictions?.[0]?.error || "Unknown error or policy violation";
-                console.warn(`Image generation failed (attempt ${i + 1}):`, reason);
-                if (reason.includes("policy")) { throw new Error("Policy Violation"); }
-                if (i === retries - 1) { return { url: `https://placehold.co/300x300/e74c3c/ffffff?text=Image+Load+Failed`, status: 'failed' }; }
-                const delay = 1000 * Math.pow(2, i) + Math.random() * 500;
-                await new Promise(res => setTimeout(res, delay));
-                continue;
-            }
-            return { url: `data:image/png;base64,${base64Data}`, status: 'success' };
-        } catch (e) {
-            if (e.message.includes("Policy Violation")) { return { url: `https://placehold.co/300x300/ff9800/ffffff?text=Image+Filtered+by+Policy`, status: 'policy_failed' }; }
-            if (i === retries - 1) { console.error("Imagen API call failed after retries:", e); return { url: `https://placehold.co/300x300/e74c3c/ffffff?text=Image+Load+Failed`, status: 'failed' }; }
-            const delay = 1000 * Math.pow(2, i) + Math.random() * 500;
-            await new Promise(res => setTimeout(res, delay));
+    try {
+        // Pollinations.ai는 별도의 API 키 없이 URL에 프롬프트를 넣으면 이미지를 줍니다.
+        // 프롬프트를 URL에 맞게 인코딩합니다.
+        const encodedPrompt = encodeURIComponent(prompt);
+        
+        // 이미지 크기를 지정하고 싶다면 뒤에 ?width=1024&height=1024 등을 붙일 수 있습니다.
+        // 랜덤 시드를 추가하여 매번 다른 이미지가 나오도록 합니다.
+        const randomSeed = Math.floor(Math.random() * 10000);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${randomSeed}&nologo=true`;
+
+        // 이미지를 먼저 fetch로 가져와서 Blob으로 변환합니다.
+        // 이렇게 하면 1. CORS 문제 확인 가능, 2. base64로 변환하여 '저장' 기능 호환성 확보
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+            throw new Error(`Image generation failed with status: ${response.status}`);
         }
+        
+        const blob = await response.blob();
+        
+        // Blob을 Data URL (Base64)로 변환하여 반환
+        // 기존 코드가 base64(data:image/...) 형식을 기대하고 저장 로직을 수행하기 때문입니다.
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                resolve({ url: reader.result, status: 'success' });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+
+    } catch (e) {
+        console.error("Image generation failed:", e);
+        // 실패 시 기본 이미지 반환
+        return { 
+            url: `https://placehold.co/300x300/e74c3c/ffffff?text=Image+Error`, 
+            status: 'failed' 
+        };
     }
-    return { url: `https://placehold.co/300x300/e74c3c/ffffff?text=Image+Load+Failed`, status: 'failed' };
 }
 
 // ---------------------------
 // 2. Core Logic: Search and Content Generation
 // ---------------------------
 
-// [MODIFIED] Password check removed, directly calls handleSearch
-// ⭐️ [요청 1] checkSearchAccess가 handleSearch를 직접 호출합니다.
 window.checkSearchAccess = function() {
     handleSearch(searchInput.value.trim());
 }
 
-// ⭐️ [요청 1 수정]
-// [NEW] New function to decide loading strategy
-// 이 함수가 "게이트키퍼" 역할을 합니다.
 async function checkAndLoadPage(word) {
     if (!db || !userId) {
         showToast("DB 연결 오류", "error");
-        executeSearchForWord(word); // Fallback to normal search
+        executeSearchForWord(word); 
         return;
     }
-    // 단어를 소문자로 정규화하여 저장 및 검색
     const normalizedWord = word.toLowerCase();
     const pageRef = doc(db, `artifacts/${appId}/users/${userId}/saved_pages/${normalizedWord}`);
     
     try {
         const docSnap = await getDoc(pageRef);
         if (docSnap.exists()) {
-            // ⭐️ [요청 1] 저장된 페이지 발견! 사용자에게 물어봅니다.
             const pageData = docSnap.data().pageData;
             showSearchChoiceModal(word, pageData);
         } else {
-            // Not found, do a new search
             executeSearchForWord(word);
         }
     } catch (error) {
         console.error("Error checking for saved page:", error);
         showToast("저장된 페이지 확인 중 오류 발생. 새 검색을 시작합니다.", "error");
-        executeSearchForWord(word); // 에러 발생 시 새 검색으로 대체
+        executeSearchForWord(word); 
     }
 }
 
 
-// ⭐️⭐️⭐️ [코드 통합] 'globe' 중복 버그를 수정한 최종 handleSearch 함수 ⭐️⭐️⭐️
 async function handleSearch(query) {
-    // [REMOVED] if (!isSearchUnlocked) return;
-    // [MODIFIED] Check for userId instead of auth.currentUser
     if (!userId) { showToast("로그인이 필요합니다.", "error"); return; } 
     if (!query) { showToast("검색어를 입력해주세요.", "warning"); return; }
     
@@ -579,39 +541,32 @@ async function handleSearch(query) {
             const ambiguityPrompt = `한국어 단어 "${query}"가 여러 개의 뚜렷하게 다른 영어 단어로 번역될 수 있나요? (예: '배' -> ship, pear, stomach). 다음 JSON 형식으로만 대답해줘: {"is_ambiguous": boolean, "english_words": ["단어1", "단어2", ...]}. 모호하지 않으면 "english_words" 배열에 대표 영어 단어 하나만 포함해줘.`;
             const ambiguityData = await callGemini(ambiguityPrompt, true);
             
-            // ⭐️ [버그 수정] Set을 사용하기 전에 소문자 변환 및 공백 제거
             const normalizedEnglishWords = ambiguityData.english_words
-                .filter(word => word) // 1. null/undefined/빈 문자열 제거
-                .map(word => word.toLowerCase().trim()); // 2. 소문자 변환 및 공백 제거
+                .filter(word => word) 
+                .map(word => word.toLowerCase().trim()); 
                 
-            const uniqueEnglishWords = [...new Set(normalizedEnglishWords)]; // 3. Set으로 중복 제거
+            const uniqueEnglishWords = [...new Set(normalizedEnglishWords)]; 
             
             if (ambiguityData.is_ambiguous && uniqueEnglishWords.length > 1) {
                 showToast(`'${query}'에 대해 ${uniqueEnglishWords.length}개의 의미를 찾았습니다. 각각 탭으로 표시합니다.`, "info");
                 for (let i = 0; i < uniqueEnglishWords.length; i++) {
                     const word = uniqueEnglishWords[i];
-                    // ⭐️ [요청 1] executeSearchForWord 대신 checkAndLoadPage 호출
                     await checkAndLoadPage(word);
                 }
             } else { 
                 const wordToSearch = uniqueEnglishWords[0] || query;
-                // ⭐️ [요청 1] executeSearchForWord 대신 checkAndLoadPage 호출
                 await checkAndLoadPage(wordToSearch); 
             }
         } catch (error) { 
             console.error("Ambiguity check failed:", error); 
             showToast("단어 의미 확인 중 오류가 발생했습니다.", "error"); 
-            // ⭐️ [요청 1] executeSearchForWord 대신 checkAndLoadPage 호출
-            await checkAndLoadPage(query); // Fallback
+            await checkAndLoadPage(query); 
         }
         finally { hideLoader(); }
     } else { 
-        // ⭐️ [요청 1] executeSearchForWord 대신 checkAndLoadPage 호출
         await checkAndLoadPage(query); 
     }
 }
-// ⭐️⭐️⭐️ [여기까지 코드 통합 완료] ⭐️⭐️⭐️
-
 
 async function executeSearchForWord(wordQuery, makeActive = true) {
     const tabId = addTab(wordQuery, makeActive);
@@ -620,7 +575,7 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
     contentContainer.innerHTML = '';
     const searchId = ++currentTab.searchId;
     currentTab.fullSearchResult = {};
-    currentTab.imageLoadPromises = []; // [NEW] Track image loads
+    currentTab.imageLoadPromises = []; 
     showLoader(0, `"${wordQuery}" 검색을 시작합니다...`);
     searchButton.disabled = true;
     const headerHeight = document.querySelector('header').offsetHeight || 100;
@@ -630,7 +585,6 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
         const initialInfoPrompt = `영어 단어 "${wordQuery}"에 대한 종합적인 정보를 생성해줘. 다음 JSON 형식을 반드시 따라줘:\n{\n  "word": "실제 영어 단어 (소문자로)",\n  "koreanMeaning": "대표적인 한글 뜻",\n  "pronunciation": "발음 기호",\n  "mainImagePrompt": "단어를 함축적으로 표현하는, 예술적이고 상세한 이미지 생성을 위한 영어 프롬프트. 예: 'brain' -> 'A hyper-realistic, detailed anatomical illustration of the human brain, showing different lobes with glowing neural pathways, artistic style.'",\n  "episode": {\n    "story": "단어를 쉽게 기억할 수 있는 매우 웃기고 재미있는 짧은 이야기 (3~4 문장).",\n    "story_ko": "위 이야기의 자연스러운 한글 번역.",\n    "imagePrompt": "이야기 내용에 맞는, 밝고 유머러스한 만화 스타일의 이미지 생성을 위한 영어 프롬프트. 예: 'Dr. Slump' 만화 스타일."\n  }\n}`;
         const initialData = await callGemini(initialInfoPrompt, true);
         
-        // ⭐️ [요청 1] AI가 생성한 단어(소문자)로 통일
         initialData.word = initialData.word.toLowerCase();
         
         currentTab.fullSearchResult.initialData = initialData;
@@ -638,17 +592,16 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
         updateLoader(25, "기본 정보 표시 중...");
         
         renderPrintButton(currentTab);
-        renderSavePageButton(currentTab); // [NEW] Add save button
+        renderSavePageButton(currentTab); 
         
         const placeholderImg = "https://placehold.co/300x300/e0e5ec/4a5568?text=Loading...";
         renderBasicInfo(initialData, placeholderImg, contentContainer);
         renderEpisode(initialData, placeholderImg, contentContainer);
         addWordToHistory(initialData.word, initialData.koreanMeaning);
         
-        // [MODIFIED] Track main image load
         const mainImagePromise = new Promise((resolve, reject) => {
             callImagenWithRetry(initialData.mainImagePrompt).then(imageResult => {
-                currentTab.fullSearchResult.mainImageUrl = imageResult.url; // Store base64 URL
+                currentTab.fullSearchResult.mainImageUrl = imageResult.url; 
                 if (searchId === currentTab.searchId) {
                     const imgEl = contentContainer.querySelector('#main-image');
                     if (imgEl) {
@@ -664,10 +617,9 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
         });
         currentTab.imageLoadPromises.push(mainImagePromise);
         
-        // [MODIFIED] Track episode image load
         const episodeImagePromise = new Promise((resolve, reject) => {
              callImagenWithRetry(initialData.episode.imagePrompt).then(imageResult => {
-                currentTab.fullSearchResult.episodeImageUrl = imageResult.url; // Store base64 URL
+                currentTab.fullSearchResult.episodeImageUrl = imageResult.url; 
                 if (searchId === currentTab.searchId) {
                     const imgEl = contentContainer.querySelector('#episode-image');
                     if (imgEl) {
@@ -687,7 +639,6 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
         currentTab.fullSearchResult.meaningsData = meaningsData;
         if (searchId !== currentTab.searchId) return;
         
-        // [MODIFIED] renderMeanings now also tracks image promises
         await renderMeanings(meaningsData, initialData.word, searchId, currentTab, contentContainer);
         
         renderSentenceCrafter(initialData.word, contentContainer);
@@ -701,7 +652,6 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
         appendConceptTreeButton(buttonContainer, fastDeepDiveData.conceptTree);
         renderDeepDive(fastDeepDiveData, contentContainer);
         
-        // [NEW] Wait for all images to finish loading before enabling save button
         Promise.all(currentTab.imageLoadPromises.map(p => p.catch(e => e)))
             .then(results => {
                 console.log("All image generation/loads complete:", results);
@@ -729,32 +679,25 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
     finally { searchButton.disabled = false; }
 }
 
-// [NEW] Function to render a page from saved Firestore data
 async function renderSavedPage(tab, pageData) {
     const contentContainer = tab.contentEl;
     contentContainer.innerHTML = '';
     
     try {
-        // 1. Render Delete Button
         renderDeletePageButton(contentContainer, pageData.initialData.word);
 
-        // 2. Render Basic Info
         renderBasicInfo(pageData.initialData, pageData.mainImageUrl, contentContainer);
         const mainImgEl = contentContainer.querySelector('#main-image');
         if (mainImgEl) {
             mainImgEl.onclick = () => showImageAnalysisModal(pageData.mainImageUrl, pageData.initialData.word, pageData.initialData.koreanMeaning);
         }
 
-        // 3. Render Episode
         renderEpisode(pageData.initialData, pageData.episodeImageUrl, contentContainer);
 
-        // 4. Render Meanings from saved data
         renderSavedMeanings(pageData.meaningsData, pageData.initialData.word, contentContainer);
 
-        // 5. Render Sentence Crafter
         renderSentenceCrafter(pageData.initialData.word, contentContainer);
 
-        // 6. Render Deep Dive
         const buttonContainer = renderDeepDiveButtonsContainer(contentContainer);
         if (pageData.fastDeepDiveData && pageData.fastDeepDiveData.conceptTree) {
             appendConceptTreeButton(buttonContainer, pageData.fastDeepDiveData.conceptTree);
@@ -774,12 +717,11 @@ async function renderSavedPage(tab, pageData) {
     }
 }
 
-// [NEW] Function to render "Save Page" button
 function renderSavePageButton(tab) {
     const saveButton = document.createElement('button');
     saveButton.id = `save-page-btn-${tab.id}`;
     saveButton.className = 'btn-3d mb-4 ml-4';
-    saveButton.disabled = true; // Disabled until images load
+    saveButton.disabled = true; 
     saveButton.innerHTML = `<div class="loader w-5 h-5 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>이미지 로딩 중...`;
     saveButton.onclick = () => saveCurrentPage(tab.id);
     const printButton = tab.contentEl.querySelector(`#print-btn-${tab.id}`);
@@ -791,7 +733,6 @@ function renderSavePageButton(tab) {
     safeCreateIcons();
 }
 
-// [NEW] Function to render "Delete Page" button
 function renderDeletePageButton(container, word, replaceButtonId = null) {
     const deleteButton = document.createElement('button');
     deleteButton.id = `delete-page-btn-${word}`;
@@ -811,6 +752,7 @@ function renderDeletePageButton(container, word, replaceButtonId = null) {
     }
     safeCreateIcons();
 }
+
 // ---------------------------
 // 3. Rendering Functions (Made Global)
 // ---------------------------
@@ -828,9 +770,8 @@ window.renderMeanings = async function(meanings, word, searchId, currentTab, mai
         const element = document.createElement('div'); element.className = 'border-t border-slate-300 pt-6';
         const placeholderImg = "https://placehold.co/300x300/e0e5ec/4a5568?text=Loading...";
         element.innerHTML = `<h4 class="text-xl font-semibold text-blue-700">${meaning.type}</h4><img id="meaning-image-${index}" src="${placeholderImg}" alt="${meaning.type}" class="rounded-lg shadow-md w-full h-auto object-cover mb-4 max-w-sm mx-auto clickable-image"><p class="text-gray-600 my-2">${meaning.description}</p>`;
-        container.appendChild(element); // DOM에 미리 추가
+        container.appendChild(element); 
         
-        // [MODIFIED] Track meaning image load
         const imgEl = element.querySelector(`#meaning-image-${index}`);
         const meaningImagePromise = new Promise((resolve, reject) => {
             callImagenWithRetry(meaning.imagePrompt).then(imageResult => {
@@ -859,7 +800,6 @@ window.renderMeanings = async function(meanings, word, searchId, currentTab, mai
     safeCreateIcons();
 }
 
-// [NEW] Sync rendering function for saved pages
 function renderSavedMeanings(meaningsData, word, mainContainer) {
     const container = document.createElement('div');
     container.className = 'card p-6 space-y-8';
@@ -928,37 +868,25 @@ window.startPronunciationCheck = function(word) { const feedbackDiv = document.g
 // 5. Modal and Tooltip Functions
 // ---------------------------
 
-// [REMOVED] All password modal variables and functions (showPasswordModalIfNeeded, showPasswordModal, hidePasswordModal, handlePasswordSubmit)
-
-// ⭐️⭐️⭐️ [코드 통합] ⭐️⭐️⭐️
-// 아래 `window.showImageAnalysisModal` 함수를 CORS 문제 해결 및 분석 결과 저장이
-// 모두 포함된 최종 버전으로 교체했습니다.
-
 window.showImageAnalysisModal = async function(src, word, meaning) { 
     modalContent.innerHTML = `<div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold">이미지 분석: ${word}</h3><button onclick="hideModal()" class="text-gray-500 hover:text-gray-800"><i data-lucide="x"></i></button></div><img src="${src}" alt="${word}" class="rounded-lg shadow-md w-full h-auto object-cover mb-6"><div id="image-analysis-result" class="p-4 bg-slate-200 rounded-lg"><p class="font-semibold text-gray-700 flex items-center"><div class="loader w-4 h-4 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>AI가 이미지를 분석 중입니다...</p></div>`; 
     modalContainer.classList.remove('hidden'); 
     modalContainer.classList.add('flex'); 
     safeCreateIcons(); 
     
-    // ⭐️ [수정] 현재 탭을 찾아서, 이미 저장된 분석 결과가 있는지 확인합니다.
     const activeTab = tabs[activeTabId];
     const savedAnalysisText = activeTab?.fullSearchResult?.mainImageAnalysisText;
 
     if (savedAnalysisText) {
-        // ⭐️ [수정] 저장된 분석 결과가 있으면, API 호출 없이 바로 표시합니다.
         document.getElementById('image-analysis-result').innerHTML = `<strong class="text-blue-700">AI 분석 (저장됨):</strong> ${savedAnalysisText}`;
-        return; // 여기서 함수 종료
+        return; 
     }
 
-    // ⭐️ [수정] 저장된 분석이 없을 때만 (처음 클릭 시) 새로 분석을 실행합니다.
     let base64Image = null;
     try {
         if (src.startsWith('data:image')) {
-            // [새 검색] - 'data:' URL이므로 base64를 바로 추출합니다.
             base64Image = src.split(',')[1];
         } else {
-            // [저장된 페이지] - 'http...' URL이므로 Vercel 프록시를 호출합니다.
-            // ⚠️ 중요: 이 기능은 Vercel의 /api/fetchImage.js 파일이 필요합니다.
             const proxyResponse = await fetch('/api/fetchImage', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -975,14 +903,10 @@ window.showImageAnalysisModal = async function(src, word, meaning) {
         }
         
         if (base64Image) {
-            // Base64 데이터를 성공적으로 확보했으면 Gemini에 분석 요청
             const prompt = `Analyze this image which was generated to represent the word "${word}" (meaning: ${meaning}). Describe how the visual elements in the image conceptually represent the word. Respond in Korean.`;
             
             callGemini(prompt, false, base64Image).then(analysis => { 
                 document.getElementById('image-analysis-result').innerHTML = `<strong class="text-blue-700">AI 분석:</strong> ${analysis}`;
-                
-                // ⭐️ [수정] 분석 결과를 현재 탭의 데이터에 저장합니다.
-                // (이후 "페이지 저장" 버튼을 누르면 이 내용이 Firestore에 함께 저장됩니다.)
                 if (activeTab?.fullSearchResult) {
                     activeTab.fullSearchResult.mainImageAnalysisText = analysis;
                 }
@@ -996,11 +920,9 @@ window.showImageAnalysisModal = async function(src, word, meaning) {
         }
     } catch (error) {
         console.error("Image analysis prep failed:", error);
-        // 사용자에게 표시되는 최종 오류 메시지
         document.getElementById('image-analysis-result').innerHTML = `<strong class="text-red-600">분석 실패:</strong> 이미지 소스를 처리할 수 없습니다. (${error.message})`;
     }
 }
-// ⭐️⭐️⭐️ [여기까지 코드 통합 완료] ⭐️⭐️⭐️
 
 
 window.showImageModal = function(src) { modalImage.src = src; imageModalContainer.classList.remove('hidden'); imageModalContainer.classList.add('flex'); safeCreateIcons(); }
@@ -1015,10 +937,8 @@ window.showFileModal = function() { fileModalContainer.classList.remove('hidden'
 window.hideFileModal = function(event) { if (event && event.currentTarget !== event.target && !event.target.closest('button')) return; fileModalContainer.classList.add('hidden'); fileModalContainer.classList.remove('flex'); }
 function showConfirmationModal(message, onConfirm) { confirmationMessage.textContent = message; confirmCallback = onConfirm; confirmationModal.classList.remove('hidden'); confirmationModal.classList.add('flex'); }
 function hideConfirmationModal() { confirmationModal.classList.add('hidden'); confirmationModal.classList.remove('flex'); confirmCallback = null; }
-// ⭐️ [수정됨] confirmOkBtn/confirmCancelBtn 리스너가 initializeFirebase 함수 내부로 이동
 
 // 6. Firestore Data Management
-// [NEW] Save full page data
 window.saveCurrentPage = async function(tabId) {
     const tab = tabs[tabId];
     if (!tab || !tab.fullSearchResult) {
@@ -1030,7 +950,6 @@ window.saveCurrentPage = async function(tabId) {
     saveButton.innerHTML = `<div class="loader w-5 h-5 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>0%...`;
 
     try {
-        // ⭐️ [요청 1] 단어를 소문자로 정규화하여 저장
         const word = tab.fullSearchResult.initialData.word.toLowerCase();
         
         if (!userId) {
@@ -1039,24 +958,21 @@ window.saveCurrentPage = async function(tabId) {
             saveButton.innerHTML = `💾 이 페이지 저장하기`;
             return;
         }
-        const pageData = JSON.parse(JSON.stringify(tab.fullSearchResult)); // Deep copy
+        const pageData = JSON.parse(JSON.stringify(tab.fullSearchResult)); 
         const imageUploads = [];
 
-        // 1. Main Image
         if (pageData.mainImageUrl && pageData.mainImageUrl.startsWith('data:image')) {
             imageUploads.push(
                 uploadBase64Image(pageData.mainImageUrl, `saved_pages/${userId}/${word}/main.png`)
                     .then(url => pageData.mainImageUrl = url)
             );
         }
-        // 2. Episode Image
         if (pageData.episodeImageUrl && pageData.episodeImageUrl.startsWith('data:image')) {
             imageUploads.push(
                 uploadBase64Image(pageData.episodeImageUrl, `saved_pages/${userId}/${word}/episode.png`)
                     .then(url => pageData.episodeImageUrl = url)
             );
         }
-        // 3. Meanings Images
         if (pageData.meaningsData) {
             pageData.meaningsData.forEach((meaning, index) => {
                 if (meaning.imageUrl && meaning.imageUrl.startsWith('data:image')) {
@@ -1072,7 +988,6 @@ window.saveCurrentPage = async function(tabId) {
              saveButton.innerHTML = `<div class="loader w-5 h-5 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>Firestore 저장 중...`;
         }
 
-        // Track progress
         let completedUploads = 0;
         imageUploads.forEach(promise => {
             promise.then(() => {
@@ -1084,16 +999,14 @@ window.saveCurrentPage = async function(tabId) {
             });
         });
 
-        await Promise.all(imageUploads.map(p => p.catch(e => e))); // Wait for all, even if some fail
+        await Promise.all(imageUploads.map(p => p.catch(e => e))); 
 
-        // All images uploaded, now save to Firestore
         saveButton.innerHTML = `<div class="loader w-5 h-5 border-2 border-t-blue-500 inline-block mr-2 animate-spin"></div>Firestore 저장 중...`;
-        // ⭐️ [요청 1] 정규화된 word(소문자)를 문서 ID로 사용
         const pageRef = doc(db, `artifacts/${appId}/users/${userId}/saved_pages/${word}`);
         await setDoc(pageRef, {
             word: word,
             savedAt: new Date(),
-            pageData: pageData // Store the modified data with Storage URLs
+            pageData: pageData 
         });
 
         showToast("페이지가 성공적으로 저장되었습니다!", "success");
@@ -1106,9 +1019,7 @@ window.saveCurrentPage = async function(tabId) {
     }
 }
 
-// [NEW] Delete saved page
 window.deleteSavedPage = async function(word) {
-    // ⭐️ [요청 1] 삭제 시에도 소문자로 정규화
     const normalizedWord = word.toLowerCase();
     showConfirmationModal(`'${normalizedWord}'의 저장된 페이지를 정말로 삭제하시겠습니까? (저장된 이미지 파일은 삭제되지 않습니다)`, async () => {
         if (!db || !userId) {
@@ -1122,12 +1033,11 @@ window.deleteSavedPage = async function(word) {
             
             const deleteButton = document.getElementById(`delete-page-btn-${normalizedWord}`);
             if(deleteButton) {
-                // Replace delete button with a "Save" button again
                 const tabId = deleteButton.closest('[id^="tab-content-"]').id.replace('tab-content-', 'tab-');
                 const saveButton = document.createElement('button');
                 saveButton.id = `save-page-btn-${tabId}`;
                 saveButton.className = 'btn-3d mb-4 ml-4';
-                saveButton.disabled = false; // It's ready to save again
+                saveButton.disabled = false; 
                 saveButton.innerHTML = `💾 이 페이지 저장하기`;
                 saveButton.onclick = () => saveCurrentPage(tabId);
                 deleteButton.replaceWith(saveButton);
@@ -1140,7 +1050,6 @@ window.deleteSavedPage = async function(word) {
     });
 }
 
-// ⭐️ [요청 1] 저장 시 소문자로 저장
 async function addWordToHistory(word, meaning) { 
     if (!db || !userId) return; 
     const normalizedWord = word.toLowerCase();
@@ -1152,11 +1061,9 @@ async function addWordToHistory(word, meaning) {
 window.saveSentence = async function(en, ko) { if (!db || !userId) { showToast("데이터베이스에 연결되지 않았습니다.", "error"); return; } try { const sentenceRef = collection(db, `artifacts/${appId}/users/${userId}/saved_sentences`); await addDoc(sentenceRef, { en, ko, timestamp: new Date(), read: false }); showToast("예문이 저장되었습니다.", "success"); } catch (e) { console.error("Error saving sentence: ", e); showToast("예문 저장에 실패했습니다.", "error"); } }
 
 // 7. Saved List Modal UI
-// ⭐️ [수정됨] listModal... 변수 선언이 파일 상단으로 이동됨
 let currentListType = ''; let currentSort = 'newest';
 function showListModal(type) { currentListType = type; listModalContainer.classList.remove('hidden'); listModalContainer.classList.add('flex'); if (type === 'words') { listModalTitle.textContent = '단어 목록 (검색 기록)'; sortOptions.innerHTML = `<option value="newest">최신순</option><option value="alphabetical">알파벳순</option>`; } else { listModalTitle.textContent = '저장된 예문 목록'; sortOptions.innerHTML = `<option value="newest">최신순</option><option value="length">길이순</option>`; } sortOptions.value = currentSort; renderList(); updateListActionButtonsState(); }
 
-// ⭐️⭐️⭐️ [버그 수정] renderList 함수를 수정합니다. ⭐️⭐️⭐️
 function renderList() { 
     let items = currentListType === 'words' ? [...savedWords] : [...savedSentences]; 
     items.sort((a, b) => { 
@@ -1180,8 +1087,6 @@ function renderList() {
     listModalContent.innerHTML = items.map(item => { 
         const readClass = item.read ? 'opacity-50' : ''; 
         
-        // ⭐️ [버그 수정] baseHtml 정의를 map 콜백 내부로 이동시켰습니다.
-        // ⭐️ [요청 3] min-w-0 클래스가 제거된 버전입니다.
         const baseHtml = `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-200 ${readClass}" data-id="${item.id}"><div class="flex items-center flex-grow"><input type="checkbox" class="mr-4 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 item-checkbox" data-id="${item.id}"><div class="flex-grow">`; 
         
         if (currentListType === 'words') { 
@@ -1193,7 +1098,6 @@ function renderList() {
                     <button onclick="deleteListItem('${item.id}', 'words')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button>
                 </div></div>`; 
         } else { 
-            // ⭐️ [요청 3, 4] 예문 목록의 truncate 클래스 제거 및 addClickToSearch 적용
             return baseHtml + `<div><p class="font-semibold">${addClickToSearch(item.en)}</p><p class="text-sm">${item.ko}</p></div></div></div><div class="flex items-center gap-1 flex-shrink-0"><button class="icon-btn" onclick="speak('${item.en.replace(/'/g, "\\'")}', 'en-US')">${createVolumeIcon('w-5 h-5')}<span class="tooltip">영어 듣기</span></button><button onclick="toggleReadStatus('${item.id}', 'sentences')" class="icon-btn">${item.read ? createEyeOffIcon() : createEyeIcon()}<span class="tooltip">${item.read ? '읽지 않음으로' : '읽음으로'}</span></button><button onclick="deleteListItem('${item.id}', 'sentences')" class="icon-btn text-red-500 hover:bg-red-100">${createTrashIcon()}<span class="tooltip">삭제</span></button></div></div>`; 
         } 
     }).join('<hr class="my-1 border-slate-300">'); 
@@ -1201,35 +1105,26 @@ function renderList() {
     safeCreateIcons(); 
 } 
 window.renderList = renderList;
-// ⭐️⭐️⭐️ [여기까지 수정] ⭐️⭐️⭐️
 
 
 function createEyeIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-gray-500"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; } function createEyeOffIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-gray-500"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path><path d="M6.61 6.61A13.16 13.16 0 0 0 2 12s3 7 10 7a9.92 9.92 0 0 0 5.43-1.61"></path><line x1="2" x2="22" y1="2" y2="22"></line></svg>`; } function createTrashIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-red-500"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M15 6V4c0-1-1-2-2-2h-2c-1 0-2 1-2 2v2"></path></svg>`; }
-// ⭐️ [추가] 님의 요청대로 새 아이콘 함수 2개를 추가합니다.
 function createLoadIcon(size = 'w-5 h-5') { 
     return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-blue-600"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>`; 
 }
 function createSearchIcon(size = 'w-5 h-5') { 
     return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-green-600"><circle cx="11" cy="11" r="8"></circle><line x1="21" x2="16.65" y1="21" y2="16.65"></line></svg>`; 
 }
-// ⭐️ [추가] 님의 요청대로 새 아이콘 버튼을 위한 함수를 추가합니다.
-// ⭐️ [요청 1] loadWordFromList 함수 수정
 window.loadWordFromList = function(word, fromSaved) {
     searchInput.value = word;
     if (fromSaved) {
-        // "저장된 페이지 로드" 클릭 시:
-        // ⭐️ [요청 1] 저장된 페이지를 찾고, 없으면 새 검색을 실행합니다.
         checkAndLoadPage(word); 
     } else {
-        // "새로 검색" 클릭 시:
-        // ⭐️ [요청 1] 즉시 새로운 AI 검색을 실행합니다. (저장 여부 묻지 않음)
         executeSearchForWord(word);
     }
-    hideListModal(); // 모달 닫기
+    hideListModal(); 
 }
 
 window.deleteListItem = function(id, type) { 
-    // ⭐️ [요청 1] 단어 삭제 시 ID(소문자) 사용
     const normalizedId = type === 'words' ? id.toLowerCase() : id;
     showConfirmationModal("정말로 이 항목을 삭제하시겠습니까?", async () => { 
         if (!db || !userId) return; 
@@ -1246,7 +1141,6 @@ window.deleteListItem = function(id, type) {
 }
 window.toggleReadStatus = async function(id, type) { 
     if (!db || !userId) return; 
-    // ⭐️ [요청 1] 단어 상태 변경 시 ID(소문자) 사용
     const normalizedId = type === 'words' ? id.toLowerCase() : id;
     const collectionName = type === 'words' ? 'saved_words' : 'saved_sentences'; 
     const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${normalizedId}`); 
@@ -1262,9 +1156,7 @@ window.toggleReadStatus = async function(id, type) {
     } 
 };
 function updateListActionButtonsState() { const checkedItems = listModalContent.querySelectorAll('.item-checkbox:checked'); const hasSelection = checkedItems.length > 0; markReadBtn.disabled = !hasSelection; markUnreadBtn.disabled = !hasSelection; deleteSelectedBtn.disabled = !hasSelection; }
-// ⭐️ [수정됨] listModalContent 리스너가 initializeFirebase 함수 내부로 이동
 async function performBulkAction(action) { const checkedItems = listModalContent.querySelectorAll('.item-checkbox:checked'); if (checkedItems.length === 0) { showToast("항목을 선택해주세요.", "warning"); return; } const actionText = action === 'delete' ? '삭제' : '상태 변경'; showConfirmationModal(`선택한 ${checkedItems.length}개 항목을 정말로 ${actionText}하시겠습니까?`, async () => { if (!db || !userId) return; const batch = writeBatch(db); const collectionName = currentListType === 'words' ? 'saved_words' : 'saved_sentences'; checkedItems.forEach(item => { 
-    // ⭐️ [요청 1] 단어 대량 작업 시 ID(소문자) 사용
     const normalizedId = currentListType === 'words' ? item.dataset.id.toLowerCase() : item.dataset.id;
     const docRef = doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${normalizedId}`); 
     if (action === 'delete') { batch.delete(docRef); } else { batch.update(docRef, { read: action === 'mark-read' }); } }); try { await batch.commit(); showToast("선택한 항목들이 처리되었습니다.", "success"); } catch (error) { console.error("Bulk action failed:", error); showToast("작업에 실패했습니다.", "error"); } }); }
@@ -1277,8 +1169,6 @@ function closeTab(tabId) { if (!tabs[tabId]) return; tabs[tabId].buttonEl.remove
 function handlePrint(tabId) { const tab = tabs[tabId]; if (!tab || !tab.fullSearchResult || !tab.fullSearchResult.encyclopediaData || !tab.fullSearchResult.fastDeepDiveData) { showToast("인쇄 데이터가 아직 준비되지 않았습니다. 모든 정보가 로딩될 때까지 기다려주세요.", "warning"); return; } const mainContentHtml = tab.contentEl.innerHTML; const encyclopediaHtml = getEncyclopediaHtml(tab.fullSearchResult.encyclopediaData.encyclopedia); const conceptTreeHtml = getConceptTreeHtml(tab.fullSearchResult.fastDeepDiveData.conceptTree); printContentArea.innerHTML = mainContentHtml + encyclopediaHtml + conceptTreeHtml; printContainer.style.display = 'block'; if (window.lucide) { printContainer.querySelectorAll('[data-lucide]').forEach(el => el.remove()); window.lucide.createIcons({ attr: 'data-lucide', element: printContainer }); } window.print(); setTimeout(() => { printContainer.style.display = 'none'; printContentArea.innerHTML = ''; }, 500); }
 
 // 9. File Storage (No changes needed)
-// ⭐️ [수정됨] fileUploadInput/fileUploadButton 변수 선언이 파일 상단으로 이동됨
-// ⭐️ [수정됨] fileUploadButton 리스너가 initializeFirebase 함수 내부로 이동
 
 function createDownloadIcon(size = 'w-5 h-5') { return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${size} text-blue-600"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>`; }
 window.downloadFile = function(fullPath) { getDownloadURL(ref(storage, fullPath)).then((url) => { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.click(); }).catch((error) => { console.error("Error getting download URL:", error); showToast("파일 다운로드 실패.", "error"); }); }
@@ -1291,7 +1181,4 @@ window.craftSentences = async function(button, word) { const contextInput = butt
 // 11. Initializers and Event Listeners
 async function translateWordOnHover(word) {if (translationCache[word]) { return translationCache[word]; } try { const prompt = `Translate the English word "${word}" to Korean. Provide only the most common meaning.`; const translation = await callGemini(prompt); translationCache[word] = translation.trim(); return translationCache[word]; } catch (error) { console.error("Translation on hover failed:", error); return "번역 실패"; } }
 
-// ⭐️ [수정됨] 모든 document/element.addEventListener가 initializeFirebase 함수 내부로 이동
-
-// App Initialization
 document.addEventListener('DOMContentLoaded', initializeFirebase);

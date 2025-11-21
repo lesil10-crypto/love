@@ -25,10 +25,8 @@ let searchInput, searchButton, loadingContainer, loadingText, progressBar, searc
     searchChoiceNewSearchBtn, searchChoiceCancelBtn,
     currentChoicePageData;
 
-// [설정] 텍스트는 Gemini, 이미지는 Imagen을 사용
+// 텍스트 생성용 Gemini API (무료/Free Tier 사용)
 const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
-// ⭐️ [중요] 구글 클라우드 크레딧을 소진하며 이미지를 생성하는 Google Imagen 엔드포인트
-const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict`;
 
 const translationCache = {};
 
@@ -45,67 +43,53 @@ let savedWords = [];
 let savedSentences = [];
 
 // =========================================================================
-// === 1. Google Imagen 이미지 생성 함수 (복구됨) ===
+// === 1. 이미지 생성 함수 (Pollinations Flux 모델 적용) ===
 // =========================================================================
 
 async function callImagenWithRetry(prompt, retries = 3) {
-    // Imagen API 요청 형식
-    const payload = { 
-        instances: [{ prompt: prompt }], 
-        parameters: { "sampleCount": 1 } 
-    };
+    try {
+        // ⭐️ 502 에러 방지: 프롬프트가 너무 길면 서버가 거부하므로 400자로 제한합니다.
+        // Gemini가 생성한 프롬프트는 매우 긴 경우가 많아 이 과정이 필수입니다.
+        const safePrompt = prompt.length > 400 ? prompt.substring(0, 400) : prompt;
+        const encodedPrompt = encodeURIComponent(safePrompt);
+        
+        // 랜덤 시드 생성 (매번 다른 이미지)
+        const randomSeed = Math.floor(Math.random() * 100000);
+        
+        // ⭐️ Flux 모델 설정 및 고화질 파라미터 적용
+        // model=flux: 고품질 모델 사용
+        // width=1024&height=1024: 고해상도
+        // nologo=true: 워터마크 제거
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${randomSeed}`;
 
-    for (let i = 0; i < retries; i++) {
-        try {
-            // 백엔드 프록시(/api/callGemini)를 통해 Google API 호출
-            const result = await fetchWithRetry(imageApiUrl, payload);
-            
-            // Imagen 응답에서 Base64 이미지 데이터 추출
-            const base64Data = result.predictions?.[0]?.bytesBase64Encoded;
-            
-            if (!base64Data) {
-                // 에러 처리
-                const reason = result.error?.message || result.predictions?.[0]?.error || "Unknown error";
-                console.warn(`Imagen generation failed (attempt ${i + 1}):`, reason);
-                
-                if (reason.includes("404") || reason.includes("not found")) {
-                    throw new Error("Model Not Found (404) - 구글 클라우드 콘솔에서 API 활성화 필요");
-                }
-                if (reason.includes("policy")) { 
-                    throw new Error("Policy Violation"); 
-                }
-                
-                if (i === retries - 1) throw new Error(reason);
-                
-                // 재시도 대기
-                const delay = 1000 * Math.pow(2, i) + Math.random() * 500;
-                await new Promise(res => setTimeout(res, delay));
-                continue;
-            }
-            
-            // 성공 시 Data URL 반환
-            return { url: `data:image/png;base64,${base64Data}`, status: 'success' };
-
-        } catch (e) {
-            if (e.message.includes("Policy Violation")) { 
-                return { url: `https://placehold.co/600x600/ff9800/ffffff?text=Policy+Filtered`, status: 'policy_failed' }; 
-            }
-            if (e.message.includes("404")) {
-                console.error("Google Cloud Project Error:", e);
-                // 404 에러 시 안내 토스트 띄우기 (최초 1회만)
-                if(i === 0) showToast("Google Imagen 모델을 찾을 수 없습니다. Google Cloud Console에서 권한을 확인하세요.", "error");
-                return { url: `https://placehold.co/600x600/e74c3c/ffffff?text=Check+Google+Cloud+Console`, status: 'failed' };
-            }
-            
-            if (i === retries - 1) { 
-                console.error("Imagen API call failed after retries:", e); 
-                return { url: `https://placehold.co/600x600/e74c3c/ffffff?text=Image+Load+Failed`, status: 'failed' }; 
-            }
-            const delay = 1000 * Math.pow(2, i) + Math.random() * 500;
-            await new Promise(res => setTimeout(res, delay));
+        // 이미지를 Fetch로 가져와서 Blob으로 변환 (CORS 문제 해결 및 저장 기능 지원용)
+        const response = await fetch(imageUrl);
+        
+        if (!response.ok) {
+            throw new Error(`Image generation failed with status: ${response.status}`);
         }
+        
+        const blob = await response.blob();
+        
+        // Blob을 Base64 Data URL로 변환하여 반환
+        // (기존 코드의 저장 기능이 Base64 형식을 기대하므로 변환 필요)
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                resolve({ url: reader.result, status: 'success' });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+
+    } catch (e) {
+        console.error("Image generation failed:", e);
+        // 실패 시 깔끔한 대체 이미지 반환
+        return { 
+            url: `https://placehold.co/1024x1024/e0e5ec/4a5568?text=Image+Generation+Failed`, 
+            status: 'failed' 
+        };
     }
-    return { url: `https://placehold.co/600x600/e74c3c/ffffff?text=Image+Load+Failed`, status: 'failed' };
 }
 
 // =========================================================================
@@ -128,14 +112,10 @@ async function fetchWithRetry(baseUrl, payload, retries = 3) {
             if (!response.ok) {
                 const errorBody = await response.text();
                 console.error(`백엔드 서버 오류: ${response.status} - ${errorBody}`);
-                // 404 에러를 throw하여 callImagenWithRetry에서 잡을 수 있게 함
-                if (response.status === 404) throw new Error("404 Not Found");
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             return await response.json(); 
         } catch (error) {
-            if (error.message.includes("404")) throw error; // 404는 재시도하지 않음
-            
             if (i === retries - 1) {
                 console.error("API 호출 최종 실패:", error);
                 // showToast("AI 서버 응답에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");

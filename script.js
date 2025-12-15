@@ -5,7 +5,7 @@ import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, up
 
 // === GitHub Pages 배포를 위한 설정 ===
 const USER_FIREBASE_CONFIG = {
- apiKey: "AIzaSyBGZpXeVMtdkWbCQrvVABxiUSPgf6RzRUM",
+ apiKey: "AIzaSyA0e7AkGSEAr2SaiZRNU-alWLhZoS6-DJM",
  authDomain: "projec-48c55.firebaseapp.com",
  projectId: "projec-48c55",
  storageBucket: "projec-48c55.appspot.com",

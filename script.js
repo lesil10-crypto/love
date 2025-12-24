@@ -3,12 +3,12 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signO
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, writeBatch, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadBytes } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
-// === GitHub Pages 배포를 위한 설정 ===
+// === GitHub Pages 배포를 위한 설정 (신규 키 적용) ===
 const USER_FIREBASE_CONFIG = {
- apiKey: "AIzaSyA0e7AkGSEAr2SaiZRNU-alWLhZoS6-DJM",
+ apiKey: "AIzaSyC-UisM1j624UWaQESMGCtYAuvkimpjBI8", // 새로 발급받은 키
  authDomain: "projec-48c55.firebaseapp.com",
  projectId: "projec-48c55",
- storageBucket: "projec-48c55.appspot.com",
+ storageBucket: "projec-48c55.firebasestorage.app", // 올바른 버킷 주소
  messagingSenderId: "376464552007",
  appId: "1:376464552007:web:929b53196fc86af19dc162",
  measurementId: "G-HMKJMNFGM4"
@@ -48,21 +48,13 @@ let savedSentences = [];
 
 async function callImagenWithRetry(prompt, retries = 3) {
     try {
-        // ⭐️ 502 에러 방지: 프롬프트가 너무 길면 서버가 거부하므로 400자로 제한합니다.
-        // Gemini가 생성한 프롬프트는 매우 긴 경우가 많아 이 과정이 필수입니다.
         const safePrompt = prompt.length > 400 ? prompt.substring(0, 400) : prompt;
         const encodedPrompt = encodeURIComponent(safePrompt);
-        
-        // 랜덤 시드 생성 (매번 다른 이미지)
         const randomSeed = Math.floor(Math.random() * 100000);
         
-        // ⭐️ Flux 모델 설정 및 고화질 파라미터 적용
-        // model=flux: 고품질 모델 사용
-        // width=1024&height=1024: 고해상도
-        // nologo=true: 워터마크 제거
+        // Flux 모델 설정
         const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${randomSeed}`;
 
-        // 이미지를 Fetch로 가져와서 Blob으로 변환 (CORS 문제 해결 및 저장 기능 지원용)
         const response = await fetch(imageUrl);
         
         if (!response.ok) {
@@ -71,8 +63,6 @@ async function callImagenWithRetry(prompt, retries = 3) {
         
         const blob = await response.blob();
         
-        // Blob을 Base64 Data URL로 변환하여 반환
-        // (기존 코드의 저장 기능이 Base64 형식을 기대하므로 변환 필요)
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => {
@@ -84,7 +74,6 @@ async function callImagenWithRetry(prompt, retries = 3) {
 
     } catch (e) {
         console.error("Image generation failed:", e);
-        // 실패 시 깔끔한 대체 이미지 반환
         return { 
             url: `https://placehold.co/1024x1024/e0e5ec/4a5568?text=Image+Generation+Failed`, 
             status: 'failed' 
@@ -93,41 +82,14 @@ async function callImagenWithRetry(prompt, retries = 3) {
 }
 
 // =========================================================================
-// === 2. API Communication Wrapper ===
+// === 2. API Communication Wrapper (수정됨: 직접 호출) ===
 // =========================================================================
 
-async function fetchWithRetry(baseUrl, payload, retries = 3) {
-  const OUR_BACKEND_API = '/api/callGemini'; 
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(OUR_BACKEND_API, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    googleApiUrl: baseUrl,
-                    payload: payload
-                })
-            });
-
-            if (!response.ok) {
-                const errorBody = await response.text();
-                console.error(`백엔드 서버 오류: ${response.status} - ${errorBody}`);
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return await response.json(); 
-        } catch (error) {
-            if (i === retries - 1) {
-                console.error("API 호출 최종 실패:", error);
-                // showToast("AI 서버 응답에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
-                throw error;
-            }
-            const delay = 1000 * Math.pow(2, i) + Math.random() * 1000;
-            await new Promise(res => setTimeout(res, delay));
-        }
-    }
-}
-
 async function callGemini(prompt, isJson = false, base64Image = null) {
+    // GitHub Pages 등 백엔드가 없는 환경을 위해 API 키를 직접 사용하여 호출
+    const apiKey = USER_FIREBASE_CONFIG.apiKey;
+    const url = `${textApiUrl}?key=${apiKey}`;
+
     const parts = [{ text: prompt }];
     if (base64Image) {
         parts.push({
@@ -137,149 +99,53 @@ async function callGemini(prompt, isJson = false, base64Image = null) {
             }
         });
     }
-    const payload = { contents: [{ parts: parts }], };
-    if (isJson) { payload.generationConfig = { responseMimeType: "application/json" }; }
-    const result = await fetchWithRetry(textApiUrl, payload);
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) { console.error("Empty response from Gemini:", result); throw new Error("Gemini API response is empty."); }
-    if (isJson) {
-        let jsonString = text.trim();
-        if (jsonString.startsWith("```json")) { jsonString = jsonString.slice(7, -3).trim(); }
-        else if (jsonString.startsWith("```")) { jsonString = jsonString.slice(3, -3).trim(); }
-        try { return JSON.parse(jsonString); }
-        catch (error) { console.error("Failed to parse JSON:", error); console.error("Original text from API:", text); throw error; }
+
+    const payload = { contents: [{ parts: parts }] };
+    if (isJson) { 
+        payload.generationConfig = { responseMimeType: "application/json" }; 
     }
-    return text;
-}
 
-// ... (이하 코드는 기존 로직 유지) ...
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-function showSearchChoiceModal(word, pageData) {
-    searchChoiceWord.textContent = word;
-    currentChoicePageData = pageData;
-    searchChoiceModal.classList.remove('hidden');
-    searchChoiceModal.classList.add('flex');
-    safeCreateIcons();
-}
-
-function hideSearchChoiceModal() {
-    searchChoiceModal.classList.add('hidden');
-    searchChoiceModal.classList.remove('flex');
-    currentChoicePageData = null;
-}
-
-async function loadSavedPageFromChoice() {
-    const word = searchChoiceWord.textContent;
-    showToast("저장된 페이지를 불러옵니다...", "info");
-    const tabId = addTab(word, true);
-    const currentTab = tabs[tabId];
-    currentTab.fullSearchResult = currentChoicePageData;
-    await renderSavedPage(currentTab, currentChoicePageData);
-    hideSearchChoiceModal();
-}
-
-function renderFileList(files) {
-    const fileListDiv = document.getElementById('file-list');
-    if (files.length === 0) {
-        fileListDiv.innerHTML = '<p class="text-center text-gray-500">업로드된 파일이 없습니다.</p>';
-        return;
-    }
-    fileListDiv.innerHTML = '';
-    files.sort((a, b) => (b.timestamp?.toDate() || 0) - (a.timestamp?.toDate() || 0));
-
-    files.forEach(fileData => {
-        const fileElement = document.createElement('div');
-        fileElement.className = 'flex items-center justify-between p-2 rounded-lg hover:bg-slate-200';
-        fileElement.innerHTML = `
-            <div class="truncate">
-                <p class="font-semibold truncate">${fileData.name}</p>
-                <p class="text-sm text-gray-500">${(fileData.size / 1024 / 1024).toFixed(2)} MB</p>
-            </div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-                <button class="icon-btn" onclick="downloadFile('${fileData.fullPath}')">${createDownloadIcon()}</button>
-                <button class="icon-btn text-red-500" onclick="deleteFile('${fileData.id}', '${fileData.fullPath}')">${createTrashIcon()}</button>
-            </div>
-        `;
-        fileListDiv.appendChild(fileElement);
-    });
-    safeCreateIcons();
-}
-
-function showToast(message, type = "info") {
-    const toast = document.getElementById('toast-container');
-    const toastMessage = document.getElementById('toast-message');
-    toastMessage.textContent = message;
-
-    toast.className = 'toast show fixed bottom-24 right-5 text-white px-6 py-3 rounded-lg shadow-lg';
-    if (type === 'success') toast.classList.add('bg-green-600');
-    else if (type === 'error') toast.classList.add('bg-red-600');
-    else if (type === 'warning') toast.classList.add('bg-yellow-500');
-    else toast.classList.add('bg-gray-800');
-
-    setTimeout(() => { toast.className = 'toast'; }, 3000);
-}
-
-function loadUserLists() {
-    if (!db || !userId) return;
-    const wordsQuery = query(collection(db, `artifacts/${appId}/users/${userId}/saved_words`));
-    onSnapshot(wordsQuery, (snapshot) => {
-        savedWords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        if(window.currentListType === 'words') window.renderList();
-    }, (error) => console.error("Error loading words:", error));
-
-    const sentencesQuery = query(collection(db, `artifacts/${appId}/users/${userId}/saved_sentences`));
-    onSnapshot(sentencesQuery, (snapshot) => {
-        savedSentences = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        if(window.currentListType === 'sentences') window.renderList();
-    }, (error) => console.error("Error loading sentences:", error));
-}
-
-function listenForFiles() {
-    if (!db || !userId) return;
-    const filesQuery = query(collection(db, `artifacts/${appId}/users/${userId}/file_metadata`));
-    onSnapshot(filesQuery, (snapshot) => {
-        const files = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderFileList(files);
-    }, (error) => {
-        console.error("Error listening for files:", error);
-        const fileListDiv = document.getElementById('file-list');
-        fileListDiv.innerHTML = '<p class="text-center text-red-500">파일 목록을 불러오는 데 실패했습니다.</p>';
-    });
-}
-
-function safeCreateIcons() {
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
-}
-
-function base64ToBlob(base64, contentType = 'image/png') {
-    const base64Data = base64.split(',')[1];
-    if (!base64Data) {
-        throw new Error("Invalid base64 string");
-    }
-    const sliceSize = 512;
-    const byteCharacters = atob(base64Data);
-    const byteArrays = [];
-    for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-        const slice = byteCharacters.slice(offset, offset + sliceSize);
-        const byteNumbers = new Array(slice.length);
-        for (let i = 0; i < slice.length; i++) {
-            byteNumbers[i] = slice.charCodeAt(i);
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Gemini API Error: ${response.status} - ${errorText}`);
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        byteArrays.push(byteArray);
+
+        const result = await response.json();
+        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!text) { 
+            console.error("Empty response from Gemini:", result); 
+            throw new Error("Gemini API response is empty."); 
+        }
+
+        if (isJson) {
+            let jsonString = text.trim();
+            if (jsonString.startsWith("```json")) { jsonString = jsonString.slice(7, -3).trim(); }
+            else if (jsonString.startsWith("```")) { jsonString = jsonString.slice(3, -3).trim(); }
+            try { return JSON.parse(jsonString); }
+            catch (error) { 
+                console.error("Failed to parse JSON:", error); 
+                console.error("Original text from API:", text); 
+                throw error; 
+            }
+        }
+        return text;
+
+    } catch (error) {
+        console.error("API Call Failed:", error);
+        throw error;
     }
-    return new Blob(byteArrays, {type: contentType});
 }
 
-async function uploadBase64Image(base64String, storagePath) {
-    const blob = base64ToBlob(base64String);
-    const storageRef = ref(storage, storagePath);
-    await uploadBytes(storageRef, blob); 
-    return await getDownloadURL(storageRef);
-}
-
+// =========================================================================
+// === 3. Firebase Initialization ===
 // =========================================================================
 
 async function initializeFirebase() {
@@ -330,10 +196,10 @@ async function initializeFirebase() {
         app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
-        storage = getStorage(app,"gs://projec-48c55.firebasestorage.app");
-        setLogLevel('debug'); 
+        storage = getStorage(app); // 자동으로 config의 bucket 사용
+        setLogLevel('error'); // 로그 레벨 조정
           
-     onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, (user) => {
             if (user) {
                 userId = user.uid;
                 console.log("Authenticated with Google. User ID:", userId);
@@ -385,6 +251,7 @@ async function initializeFirebase() {
         document.getElementById('auth-container').classList.add('hidden'); 
     }
 
+    // 이벤트 리스너 등록
     confirmOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } hideConfirmationModal(); });
     confirmCancelBtn.addEventListener('click', hideConfirmationModal);
 
@@ -410,18 +277,17 @@ async function initializeFirebase() {
         const uploadTask = uploadBytesResumable(storageRef, file); 
         uploadTask.on('state_changed', 
             (snapshot) => { const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100; uploadProgressBar.style.width = progress + '%'; }, 
-            (error) => { console.error("Upload failed. Firebase Error Code:", error.code); console.error("Full Error:", error); showToast(`파일 업로드 실패: ${error.code}`, "error"); uploadProgressContainer.classList.add('hidden'); uploadProgressBar.style.width = '0%'; fileUploadButton.disabled = false; }, 
+            (error) => { console.error("Upload failed.", error); showToast(`파일 업로드 실패`, "error"); uploadProgressContainer.classList.add('hidden'); uploadProgressBar.style.width = '0%'; fileUploadButton.disabled = false; }, 
             async () => { 
-                let firestoreError = null; 
                 try { 
                     const metadata = uploadTask.snapshot.metadata; 
                     await addDoc(collection(db, `artifacts/${appId}/users/${userId}/file_metadata`), { name: metadata.name, fullPath: metadata.fullPath, size: metadata.size, contentType: metadata.contentType, timestamp: new Date() }); 
+                    showToast("파일 업로드 성공.", "success");
                 } catch (error) { 
-                    firestoreError = error; console.error("Firestore metadata save error:", error.code, error.message); showToast(`파일 정보 저장 실패: ${error.code}`, "error"); 
-                    await deleteObject(uploadTask.snapshot.ref).catch(err => console.error("Orphaned file cleanup failed:", err)); 
+                    console.error("Metadata save error:", error); showToast(`파일 정보 저장 실패`, "error"); 
+                    await deleteObject(uploadTask.snapshot.ref).catch(err => console.error("Cleanup failed:", err)); 
                 } finally { 
                     uploadProgressContainer.classList.add('hidden'); uploadProgressBar.style.width = '0%'; fileUploadInput.value = ''; fileUploadButton.disabled = false; 
-                    if (!firestoreError) { showToast("파일 업로드 성공.", "success"); } 
                 } 
             }
         ); 
@@ -661,7 +527,7 @@ async function executeSearchForWord(wordQuery, makeActive = true) {
         hideLoader();
         showToast("핵심 정보 로딩 완료! 백과사전 정보를 생성합니다...", "info");
         const encyclopediaPrompt = `영어 단어 "${initialData.word}"에 대한 백과사전식 설명을 생성해줘. A4 용지 3장 분량에 준하는 상세한 내용이어야 하며, '어원', '역사적 배경', '문학/현대에서의 사용' 섹션을 포함하여 구조화해줘. 다음 JSON 형식만 따라줘:\n{ \n  "encyclopedia": { \n    "introduction": "상세한 서론 (영어, 여러 문단)", "etymology": "깊이 있는 어원 분석 (영어, 여러 문단)", "history": "포괄적인 역사적 배경과 변화 과정 (영어, 여러 문단)", "usage": "문학, 현대 미디어, 일상에서의 사용 예시 (영어, 여러 문단)",\n    "introduction_ko": "위 내용의 한글 번역", "etymology_ko": "위 내용의 한글 번역", "history_ko": "위 내용의 한글 번역", "usage_ko": "위 내용의 한글 번역"\n  }\n}`;
-        const encyclopediaFullData = await callGemini(encyclopediaPrompt, true);
+        const encyclopediaFullData = await callGemini(encyopediaPrompt, true);
         if (searchId !== currentTab.searchId) return;
         currentTab.fullSearchResult.encyclopediaData = encyclopediaFullData;
         appendEncyclopediaButton(buttonContainer, encyclopediaFullData.encyclopedia);
@@ -833,37 +699,35 @@ window.showImageAnalysisModal = async function(src, word, meaning) {
         if (src.startsWith('data:image')) {
             base64Image = src.split(',')[1];
         } else {
-            const proxyResponse = await fetch('/api/fetchImage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageUrl: src })
-            });
-            
-            if (!proxyResponse.ok) {
-                const errorData = await proxyResponse.json();
-                throw new Error(`Proxy failed: ${errorData.error || 'Unknown error'}`);
+            // Proxy 대신 직접 Fetch 시도 (CORS 주의)
+            try {
+                const response = await fetch(src);
+                const blob = await response.blob();
+                const reader = new FileReader();
+                base64Image = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                    reader.readAsDataURL(blob);
+                });
+            } catch (e) {
+                console.warn("Direct image fetch failed (CORS likely). Using placeholder analysis.");
+                // CORS 문제 시 프롬프트만으로 분석 시도
+                base64Image = null;
             }
-            
-            const imageData = await proxyResponse.json();
-            base64Image = imageData.base64;
         }
         
-        if (base64Image) {
-            const prompt = `Analyze this image which was generated to represent the word "${word}" (meaning: ${meaning}). Describe how the visual elements in the image conceptually represent the word. Respond in Korean.`;
-            
-            callGemini(prompt, false, base64Image).then(analysis => { 
-                document.getElementById('image-analysis-result').innerHTML = `<strong class="text-blue-700">AI 분석:</strong> ${analysis}`;
-                if (activeTab?.fullSearchResult) {
-                    activeTab.fullSearchResult.mainImageAnalysisText = analysis;
-                }
+        const prompt = `Analyze this image which was generated to represent the word "${word}" (meaning: ${meaning}). Describe how the visual elements in the image conceptually represent the word. Respond in Korean.`;
+        
+        callGemini(prompt, false, base64Image).then(analysis => { 
+            document.getElementById('image-analysis-result').innerHTML = `<strong class="text-blue-700">AI 분석:</strong> ${analysis}`;
+            if (activeTab?.fullSearchResult) {
+                activeTab.fullSearchResult.mainImageAnalysisText = analysis;
+            }
 
-            }).catch(e => { 
-                console.error("Gemini analysis failed:", e);
-                document.getElementById('image-analysis-result').innerHTML = `<strong class="text-red-600">분석 실패:</strong> AI가 이미지를 분석할 수 없습니다. (Gemini 오류)`; 
-            });
-        } else {
-            throw new Error("Failed to get base64 data from source");
-        }
+        }).catch(e => { 
+            console.error("Gemini analysis failed:", e);
+            document.getElementById('image-analysis-result').innerHTML = `<strong class="text-red-600">분석 실패:</strong> AI가 이미지를 분석할 수 없습니다. (Gemini 오류)`; 
+        });
+
     } catch (error) {
         console.error("Image analysis prep failed:", error);
         document.getElementById('image-analysis-result').innerHTML = `<strong class="text-red-600">분석 실패:</strong> 이미지 소스를 처리할 수 없습니다. (${error.message})`;
@@ -1126,5 +990,52 @@ window.craftSentences = async function(button, word) { const contextInput = butt
 
 // 11. Initializers and Event Listeners
 async function translateWordOnHover(word) {if (translationCache[word]) { return translationCache[word]; } try { const prompt = `Translate the English word "${word}" to Korean. Provide only the most common meaning.`; const translation = await callGemini(prompt); translationCache[word] = translation.trim(); return translationCache[word]; } catch (error) { console.error("Translation on hover failed:", error); return "번역 실패"; } }
+
+function safeCreateIcons() {
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+}
+
+function base64ToBlob(base64, contentType = 'image/png') {
+    const base64Data = base64.split(',')[1];
+    if (!base64Data) {
+        throw new Error("Invalid base64 string");
+    }
+    const sliceSize = 512;
+    const byteCharacters = atob(base64Data);
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+        const slice = byteCharacters.slice(offset, offset + sliceSize);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+    }
+    return new Blob(byteArrays, {type: contentType});
+}
+
+async function uploadBase64Image(base64String, storagePath) {
+    const blob = base64ToBlob(base64String);
+    const storageRef = ref(storage, storagePath);
+    await uploadBytes(storageRef, blob); 
+    return await getDownloadURL(storageRef);
+}
+
+function showToast(message, type = "info") {
+    const toast = document.getElementById('toast-container');
+    const toastMessage = document.getElementById('toast-message');
+    toastMessage.textContent = message;
+
+    toast.className = 'toast show fixed bottom-24 right-5 text-white px-6 py-3 rounded-lg shadow-lg';
+    if (type === 'success') toast.classList.add('bg-green-600');
+    else if (type === 'error') toast.classList.add('bg-red-600');
+    else if (type === 'warning') toast.classList.add('bg-yellow-500');
+    else toast.classList.add('bg-gray-800');
+
+    setTimeout(() => { toast.className = 'toast'; }, 3000);
+}
 
 document.addEventListener('DOMContentLoaded', initializeFirebase);

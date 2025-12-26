@@ -42,6 +42,25 @@ let currentListType = 'words';
 let currentSort = 'date-desc';
 
 // =========================================================================
+// === [중요] 로그인 함수 추가 (ReferenceError 해결) ===
+// =========================================================================
+
+window.signInWithGoogle = async () => {
+    if (!auth) {
+        showToast("시스템 로딩 중입니다. 잠시 후 다시 시도해주세요.", "warning");
+        return;
+    }
+    try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+        // 로그인 성공 시 onAuthStateChanged에서 UI 자동 업데이트됨
+    } catch (error) {
+        console.error("Google Sign-In Error:", error);
+        showToast("로그인에 실패했습니다: " + error.message, "error");
+    }
+};
+
+// =========================================================================
 // === 1. 이미지 생성 (Pollinations) ===
 // =========================================================================
 
